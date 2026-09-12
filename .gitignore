@@ -17,3 +17,6 @@ node_modules/
 
 .DS_Store
 .pytest_cache/
+
+# Saída da simulação de Slack (backend/slack_mock.py) — artefato de execução
+/artifacts/
