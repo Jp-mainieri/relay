@@ -31,13 +31,17 @@ def _print_line(seq: int, parsed: ParsedLine) -> None:
     print(f"  [{seq:02d}] {speaker}: {parsed.text}")
 
 
-def _print_finish(state: PlayerState) -> None:
+def _print_finish(player: TranscriptPlayer, state: PlayerState) -> None:
     if state == PlayerState.FINISHED:
         print("-- turno encerrado: POST /api/turn/end enviado --\n")
     elif state == PlayerState.STOPPED:
         print("-- reprodução interrompida (sem turn/end) --\n")
     elif state == PlayerState.ERROR:
-        print("-- ERRO durante a reprodução, veja a mensagem acima --\n")
+        detail = player.last_error or "(sem detalhe capturado)"
+        hint = ""
+        if "404" in detail:
+            hint = " Provável causa: estação sem checklist configurado — chame POST /api/config antes de iniciar a reprodução."
+        print(f"-- ERRO durante a reprodução: {detail}{hint} --\n")
 
 
 def _choose_file(files: list[Path]) -> Path | None:
@@ -82,7 +86,7 @@ def run_repl(player: TranscriptPlayer) -> None:
                 continue
             selected = chosen
             print(f"Iniciando '{chosen.name}'...")
-            player.start(chosen, on_line=_print_line, on_finish=_print_finish)
+            player.start(chosen, on_line=_print_line, on_finish=lambda state: _print_finish(player, state))
             continue
 
         if cmd in ("r", "reset", "parar", "stop"):
@@ -119,7 +123,7 @@ def main() -> None:
         done = {"finished": False}
 
         def _on_finish(state: PlayerState) -> None:
-            _print_finish(state)
+            _print_finish(player, state)
             done["finished"] = True
 
         player.start(args.file, on_line=_print_line, on_finish=_on_finish)
