@@ -1,18 +1,12 @@
-OPERADOR A: Última passada: tá tranquilo?
-OPERADOR B: Tá, só a nove ficou esperando conferência.
-OPERADOR A: A carga congelada tá onde?
-OPERADOR B: No plug cinco, painel marcando menos de dezoito.
-OPERADOR A: Certinho. A oito já pode receber?
-OPERADOR B: Pode. Caminhão saiu, calço recolhido, piso seco.
-OPERADOR A: As máquinas seguram a madrugada?
-OPERADOR B: A dois tá em setenta, a quatro em oitenta e três.
-OPERADOR A: E a cinco?
-OPERADOR B: Sessenta, mas sem fazer força demais ela vai.
-OPERADOR A: Teve batida em produto?
-OPERADOR B: Dois fardos de refrigerante ficaram molhados porque uma garrafa abriu.
-OPERADOR A: Foi separado?
-OPERADOR B: Foi, e o restante tá íntegro.
-OPERADOR A: Alguma máquina pedindo atenção?
-OPERADOR B: A quatro tá com farol traseiro apagado.
-OPERADOR A: Anota pra oficina olhar amanhã.
-OPERADOR B: Já deixei no livro. Boa noite aí.
+OPERADOR A: Checklist da passagem: o status da carga refrigerada foi confirmado?
+OPERADOR B: Status da carga refrigerada confirmado: a carga congelada está no plug cinco e o painel marca menos de dezoito graus.
+OPERADOR A: A liberação da doca oito foi confirmada?
+OPERADOR B: Liberação da doca oito confirmada: o caminhão saiu, o calço foi recolhido e o piso está seco.
+OPERADOR A: Qual é o nível de bateria das empilhadeiras para a madrugada?
+OPERADOR B: Nível de bateria das empilhadeiras confirmado: a empilhadeira dois está em setenta por cento e a quatro em oitenta e três por cento.
+OPERADOR A: Há avarias ou pendências de manutenção para registrar?
+OPERADOR B: Há uma pendência de manutenção: o farol traseiro da empilhadeira quatro está apagado e já foi anotado para a oficina olhar amanhã.
+OPERADOR A: E a avaria nos refrigerantes?
+OPERADOR B: A avaria dos dois fardos molhados foi separada; o restante da carga está íntegro.
+OPERADOR A: Então todos os itens do checklist foram tratados.
+OPERADOR B: Confirmado, passagem de turno concluída.

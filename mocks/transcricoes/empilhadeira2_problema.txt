@@ -1,18 +1,12 @@
-OPERADOR A: Tá me ouvindo?
-OPERADOR B: Tô, fala. O rádio tá falhando hoje.
-OPERADOR A: A carga de iogurte ficou certinha?
-OPERADOR B: Ficou no plug quatro, tudo fechado, marcador em dois graus.
-OPERADOR A: Beleza. E a doca cinco?
-OPERADOR B: Livre desde seis e vinte. Motorista assinou e vazou.
-OPERADOR A: Tem alguém pra varrer lá?
-OPERADOR B: O Davi passou agora, tá limpa.
-OPERADOR A: As empilhadeiras como tão?
-OPERADOR B: A um, boa. A três, boa. A empilhadeira 2 é que tá com problema de recarga de novo.
-OPERADOR A: Ainda não segura?
-OPERADOR B: Você põe no cabo, acende verde, mas sobe quase nada.
-OPERADOR A: Então não manda ela pra operação pesada.
-OPERADOR B: Já deixei com etiqueta e avisei manutenção.
-OPERADOR A: Teve mais alguma bronca?
-OPERADOR B: Um rodízio da dois tá meio solto também.
-OPERADOR A: Aí complicou, deixa parada mesmo.
-OPERADOR B: Foi o que fiz.
+OPERADOR A: Checklist: o status da carga refrigerada de iogurte foi confirmado?
+OPERADOR B: Status da carga refrigerada confirmado: a carga de iogurte está no plug quatro, fechada, com marcador em dois graus.
+OPERADOR A: A liberação da doca cinco foi confirmada?
+OPERADOR B: Liberação da doca cinco confirmada: ela está livre desde seis e vinte e o motorista assinou a saída.
+OPERADOR A: Qual é o nível de bateria das empilhadeiras?
+OPERADOR B: A bateria da empilhadeira um está boa e a bateria da empilhadeira três está boa. A empilhadeira dois tem problema de recarga de novo.
+OPERADOR A: Qual é exatamente a pendência da empilhadeira dois?
+OPERADOR B: Pendência de manutenção da empilhadeira dois: no cabo ela acende verde, mas a bateria quase não carrega. Ela foi etiquetada e a manutenção foi avisada.
+OPERADOR A: Há outra avaria de equipamento?
+OPERADOR B: Há uma avaria: o rodízio da empilhadeira dois está meio solto; ela ficou parada para não ir à operação pesada.
+OPERADOR A: Confirmado, vou registrar as pendências de manutenção da empilhadeira dois.
+OPERADOR B: Confirmado.
