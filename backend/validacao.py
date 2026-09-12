@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any
 
 from dotenv import load_dotenv
@@ -78,6 +79,19 @@ def _request_payload(transcript: str, items: list[str]) -> str:
     )
 
 
+def _has_literal_evidence(transcript: str, evidence: str) -> bool:
+    """Aceita apenas o mesmo trecho verbal, tolerando espaço e pontuação.
+
+    O mock congelado contém ``"Ja liberei"`` enquanto a transcrição traz
+    ``"Ja, liberei"``. A normalização abaixo acomoda esse detalhe tipográfico,
+    mas mantém a sequência integral de palavras como barreira contra evidência
+    inventada ou parafraseada.
+    """
+    normalized_transcript = re.sub(r"[^\w]+", " ", transcript, flags=re.UNICODE).casefold().strip()
+    normalized_evidence = re.sub(r"[^\w]+", " ", evidence, flags=re.UNICODE).casefold().strip()
+    return bool(normalized_evidence) and f" {normalized_evidence} " in f" {normalized_transcript} "
+
+
 def _validate_analysis(analysis: AnalyzeResponse, transcript: str, items: list[str]) -> AnalyzeResponse:
     """Impõe invariantes de negócio que o schema estrutural não consegue cobrir."""
     if len(analysis.checklist_status) != len(items):
@@ -87,7 +101,7 @@ def _validate_analysis(analysis: AnalyzeResponse, transcript: str, items: list[s
         if status.item != expected_item:
             raise ValidationEngineError("O modelo alterou ou reordenou um item do checklist.")
         if status.covered:
-            if not status.evidence or status.evidence not in transcript:
+            if not status.evidence or not _has_literal_evidence(transcript, status.evidence):
                 raise ValidationEngineError(
                     "O modelo marcou item como coberto sem evidência literal presente na transcrição."
                 )
