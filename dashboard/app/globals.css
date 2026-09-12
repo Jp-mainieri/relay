@@ -536,3 +536,132 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   VoiceInput — indicador de turno sendo escutado.
+
+   O anel pulsa, o microfone não. Ícone em rotação lê como spinner de loading
+   ("estou processando, espere"), e o que a peça precisa comunicar é o oposto:
+   captação ativa acontecendo agora. Onda concêntrica saindo do centro é o
+   vocabulário certo para isso.
+
+   O bloco global de prefers-reduced-motion no fim deste arquivo já neutraliza
+   estas animações — nada a fazer aqui.
+--------------------------------------------------------------------------- */
+
+.voice-input {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.voice-trigger {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  border-radius: var(--r-pill);
+}
+
+.voice-trigger:focus-visible {
+  outline: var(--divider) solid var(--covered);
+  outline-offset: 3px;
+}
+
+.voice-indicator {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--r-pill);
+  background: var(--graphite);
+  color: var(--fog);
+  transition: background 200ms ease, color 200ms ease;
+}
+
+.voice-indicator[data-on="true"] {
+  background: var(--covered-wash);
+  color: var(--covered);
+}
+
+.voice-mic {
+  width: 1.125rem;
+  height: 1.125rem;
+  position: relative;
+  z-index: 1;
+}
+
+.voice-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-pill);
+  border: var(--divider) solid var(--covered);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.voice-indicator[data-on="true"] .voice-ring {
+  animation: voice-ripple 2s ease-out infinite;
+}
+
+/* Segundo anel defasado: duas ondas bastam para ler como propagação. Mais que
+   isso vira decoração e engorda uma peça que precisa continuar compacta.
+
+   O seletor repete `.voice-indicator[data-on="true"]` de propósito: a regra
+   acima usa o shorthand `animation`, que reescreve animation-delay para 0s.
+   Com menos especificidade que ela, o delay era descartado e os dois anéis
+   pulsavam em sincronia — sem onda nenhuma. */
+.voice-indicator[data-on="true"] .voice-ring--delayed {
+  animation-delay: 1s;
+}
+
+@keyframes voice-ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}
+
+.voice-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.1875rem;
+  height: 1.25rem;
+}
+
+.voice-bar {
+  width: 0.1875rem;
+  border-radius: var(--r-pill);
+  background: var(--ash);
+  transition: height 240ms ease, background 200ms ease;
+}
+
+.voice-input[data-on="true"] .voice-bar {
+  background: var(--covered);
+}
+
+.voice-clock {
+  font-family: var(--mono);
+  font-size: var(--t-caption);
+  color: var(--fog);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Visualmente oculto, mas lido por leitor de tela — o par do aria-live. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
