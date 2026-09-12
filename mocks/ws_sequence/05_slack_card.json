@@ -1,0 +1,19 @@
+{
+  "type": "slack_card",
+  "payload": {
+    "station_id": "doca-04",
+    "turn_id": "mock-turn-0001",
+    "card": {
+      "station_id": "doca-04",
+      "timestamp": "2026-09-12T12:00:22Z",
+      "coverage_pct": 50,
+      "ambiguous_alert": "Historico: Empilhadeira 2 apresentou falha de recarga nos ultimos 2 turnos.",
+      "summary_bullets": [
+        "Carga da Swift conectada e refrigerada no plug 3.",
+        "Doca 4 liberada.",
+        "Pendente: checagem de bateria das empilhadeiras.",
+        "Pendente: checagem de avarias/manutencao."
+      ]
+    }
+  }
+}

@@ -12,6 +12,14 @@
 > mudar um muda o outro no mesmo commit.
 >
 > Exemplos completos de cada payload: `/mocks/*.json`.
+>
+> **Revisão 2 (aditiva):** fecha três lacunas achadas na revisão do contrato —
+> (1) o stream P1→P2 nunca tinha formato definido, (2) não havia gatilho
+> explícito de fim de turno (TTS e Slack nunca disparavam), (3) dono do POST
+> ao Slack e nome do evento `slack_sent` eram ambíguos/circulares, e (4)
+> `summary_bullets` exigia trabalho extra de quem não devia fazê-lo. Nenhum
+> campo existente mudou de nome, tipo ou formato — quem já integrou contra a
+> Revisão 1 não refaz nada, só soma o que falta.
 
 ---
 
@@ -40,13 +48,14 @@ Configura o checklist de uma estação em linguagem natural (RF01).
 ## 2. `POST /api/analyze`
 
 Compara a transcrição acumulada com o checklist configurado (RF04). Chamado
-internamente pelo orquestrador (P2) a cada novo trecho relevante de
-transcrição — não é tipicamente chamado direto pelo dashboard.
+internamente pelo orquestrador (P2) — a cada novo trecho relevante de
+transcrição, e obrigatoriamente uma última vez ao receber `POST /api/turn/end`
+(seção 2.6). Não é tipicamente chamado direto pelo dashboard.
 
 **Request** (`AnalyzeRequest`) — `mocks/analyze_request.json`. **Este request
 não estava explícito em `05-arquitetura.md`** (só a resposta aparecia) — foi
-definido agora para fechar o contrato, espelhando a assinatura que P3 expõe
-em `backend/validacao.py`: `analisar(transcricao: str, itens: list[str])`.
+definido na Revisão 1 para fechar o contrato, espelhando a assinatura que P3
+expõe em `backend/validacao.py`: `analisar(transcricao: str, itens: list[str])`.
 ```json
 {
   "station_id": "doca-04",
@@ -56,7 +65,8 @@ em `backend/validacao.py`: `analisar(transcricao: str, itens: list[str])`.
 ```
 - `transcript`: texto único, falas separadas por quebra de linha, prefixadas
   por locutor quando disponível (`"OPERADOR A: ..."`). Montar essa string a
-  partir do stream de P1 é responsabilidade de P2.
+  partir das falas recebidas em `POST /api/transcript` é responsabilidade de
+  P2 — ver seção 2.5 para o algoritmo exato.
 
 **Response** (`AnalyzeResponse`) — `mocks/analyze_response.json`
 ```json
@@ -68,9 +78,23 @@ em `backend/validacao.py`: `analisar(transcricao: str, itens: list[str])`.
   "is_complete": false,
   "intervention_prompt": "Atencao: ...",
   "ambiguous_alert": "Historico: ...",
-  "summary": "Doca liberada e carga refrigerada conectada. ..."
+  "summary": "Doca liberada e carga refrigerada conectada. ...",
+  "summary_bullets": ["Carga da Swift conectada e refrigerada no plug 3.", "..."]
 }
 ```
+
+**`summary_bullets` (NOVO — Revisão 2).** O mesmo resumo de `summary`, já
+quebrado em bullet points, prontos para `SlackCardPayload.summary_bullets`
+(seção 5). Preenchido por **P3**, na mesma chamada de LLM que gera `summary` —
+não uma segunda chamada de LLM nem um split ingênuo em ponto final feito por
+quem monta o card depois.
+
+**Por quê:** o contrato anterior mandava "quem monta o card do Slack" quebrar
+`summary` em bullets. Isso significava ou (a) uma segunda chamada de LLM no
+caminho da demo — latência extra bem no momento em que o card sobe no telão —
+ou (b) um `summary.split(". ")` ingênuo, arriscando bullets cortados no meio.
+P3 já tem uma chamada de LLM em voo para gerar `summary`; pedir os bullets na
+mesma chamada é custo marginal zero. P4/P2 passam a apenas repassar a lista.
 
 **Quem preenche o quê** (pergunta óbvia entre P2 e P3 — resolvida aqui):
 | Campo | Preenchido por | Regra |
@@ -80,7 +104,81 @@ em `backend/validacao.py`: `analisar(transcricao: str, itens: list[str])`.
 | `intervention_prompt` | P3 | só não-null quando `is_complete=false`; frase curta em pt-BR pronta pro TTS |
 | `ambiguous_alert` | P3 | null se nenhuma entidade crítica mencionada, **ou se a consulta à Ambiguous falhar** (RNF04 — nunca propagar exceção) |
 | `summary` | P3 | sempre preenchido, mesmo se `is_complete=true` |
-| Disparo do TTS / envio ao Slack | P2 dispara o evento; **P4 executa** | Ver seção 3 — são eventos distintos das atualizações de estado |
+| `summary_bullets` | P3 | mesma chamada de LLM que gera `summary`; sempre preenchido |
+| Disparo do TTS / card do Slack | P2 dispara os eventos; **P4 executa** (TTS e o POST ao webhook) | Ver seção 4 — gatilho é `POST /api/turn/end` (seção 2.6), eventos distintos das atualizações de estado |
+
+---
+
+## 2.5 `POST /api/transcript` — ingestão de fala (NOVO — Revisão 2)
+
+Fecha o contrato **P1 → P2** que faltava: a Revisão 1 dizia que P2 monta
+`AnalyzeRequest.transcript` "a partir do stream de P1" sem nunca definir o
+formato desse stream. Sem isso, cada fronteira ia inventar um formato
+diferente.
+
+P1 chama este endpoint **uma vez por fala**, na ordem em que a fala ocorreu.
+
+**Request** (`TranscriptPostRequest`) — `mocks/transcript_post.json`
+```json
+{
+  "station_id": "doca-04",
+  "seq": 1,
+  "speaker": "OPERADOR B",
+  "text": "Tranquilo. A carga da Swift ja ta no plug 3, refrigerada certinha.",
+  "ts": "2026-09-12T12:00:05Z"
+}
+```
+
+**Response** (`TranscriptPostResponse` = `AckResponse`)
+```json
+{ "status": "ok" }
+```
+
+- `seq`: inteiro, começando em 0, incrementando uma unidade por fala — **é P1
+  quem numera**. P2 ordena as falas recebidas por `seq` antes de anexar ao
+  `transcript_log` do turno; `seq` é a fonte da verdade de ordem, não a ordem
+  de chegada da requisição HTTP (que pode variar com retry/latência de rede).
+- **O formato é idêntico, campo a campo (`seq`, `speaker`, `text`, `ts`), ao
+  de um item de `TurnState.transcript_log`** (seção 3) — de propósito: P2
+  anexa a fala recebida direto no log do turno, sem nenhuma conversão de
+  schema. `station_id` existe só neste request, para rotear ao turno certo;
+  não é replicado dentro de cada `TranscriptLine`.
+- **Algoritmo de P2 para montar `AnalyzeRequest.transcript`:** ordenar as
+  linhas do `transcript_log` por `seq` e concatenar
+  `f"{speaker}: {text}"` (ou só `text` se `speaker` for `null`) separadas por
+  `\n`, na ordem de `seq`.
+- Dono: P1 chama; P2 implementa o handler.
+
+---
+
+## 2.6 `POST /api/turn/end` — fim de turno (NOVO — Revisão 2)
+
+Fecha o gatilho que faltava para os eventos `intervention` e `slack_card`
+(seção 4) — sem ele, esses dois momentos de payoff da demo nunca disparavam,
+porque nada definia de onde vinha o sinal de "turno acabou".
+
+**Request** (`TurnEndRequest`) — `mocks/turn_end.json`
+```json
+{ "station_id": "doca-04" }
+```
+
+**Response** (`TurnEndResponse` = `AckResponse`)
+```json
+{ "status": "ok" }
+```
+
+- **Enviado por P1**, logo após a última fala do turno.
+- **Este é o ÚNICO gatilho de fim de turno reconhecido pelo sistema.** P2
+  **não** infere fim de turno por timeout de silêncio, nem por qualquer outra
+  heurística — só por esta chamada. (Se P1 não tiver um sinal humano/de UI
+  claro de "acabou o turno" a tempo, isso é um risco a levantar cedo, não algo
+  para resolver com um timeout adivinhado no orquestrador.)
+- **Ao receber, P2:**
+  1. roda a análise (equivalente a `POST /api/analyze`) uma última vez, com o
+     `transcript_log` acumulado até agora;
+  2. emite `intervention` pelo WebSocket **se `is_complete=false`**;
+  3. emite `slack_card` pelo WebSocket **sempre**, independente de `is_complete`.
+- Dono: P1 chama; P2 implementa o handler e orquestra os dois eventos.
 
 ---
 
@@ -126,13 +224,14 @@ Toda mensagem no canal é `{ "type": "...", "payload": {...} }`. Quatro tipos:
 | `type` | Payload | Quando é enviado | Quantas vezes por turno |
 |---|---|---|---|
 | `state` | `TurnState` (snapshot completo) | ao conectar, e a cada mudança de checklist ou nova fala transcrita | N vezes |
-| `intervention` | `InterventionPayload` | ao fim do turno, só se `is_complete=false` | 0 ou 1 |
-| `slack_sent` | `SlackSentPayload` | ao fim do turno, sempre (feedback de que o card foi ao Slack) | 1 |
+| `intervention` | `InterventionPayload` | ao receber `POST /api/turn/end`, só se `is_complete=false` | 0 ou 1 |
+| `slack_card` | `SlackCardMessagePayload` | ao receber `POST /api/turn/end`, sempre | 1 |
 | `error` | `ErrorPayload` | falha não-fatal (ex: Ambiguous fora do ar) | 0+, nunca derruba a conexão |
 
-`intervention` e `slack_sent` são **eventos distintos das atualizações de
-`state`** — P4 não deve inferir "fim de turno" olhando o conteúdo de um
-`state`; o backend sinaliza explicitamente.
+`intervention` e `slack_card` são **eventos distintos das atualizações de
+`state`**, disparados exclusivamente por `POST /api/turn/end` (seção 2.6) — P4
+não deve inferir "fim de turno" olhando o conteúdo de um `state`; o backend
+sinaliza explicitamente.
 
 **`TurnState`** (payload de `state`) — ver exemplos em ordem em
 `mocks/ws_sequence/01_state_initial.json` → `03_state_final.json`:
@@ -150,16 +249,17 @@ Toda mensagem no canal é `{ "type": "...", "payload": {...} }`. Quatro tipos:
 ```
 - `turn_id`: muda a cada novo turno na mesma estação — usado por P4 para
   detectar "começou um turno novo" e limpar a UI, se necessário.
-- `transcript_log`: lista **completa e ordenada** por `seq`, não só a fala
-  nova.
+- `transcript_log`: lista **completa e ordenada** por `seq` (mesmo shape do
+  `TranscriptPostRequest` de P1, menos `station_id` — seção 2.5), não só a
+  fala nova.
 
 **`intervention`** — `mocks/ws_sequence/04_intervention.json`. P4 dispara o
 TTS falando `payload.intervention_prompt`, no máximo uma vez por turno.
 
-**`slack_sent`** — `mocks/ws_sequence/05_slack_sent.json`. Confirma que P4 (ou
-P2, dependendo de quem acabar executando o POST ao webhook — ver nota em
-`backend/README.md`) já enviou o card. Uso no dashboard é opcional (ex: toast
-"resumo enviado").
+**`slack_card`** (renomeado de `slack_sent` — Revisão 2, ver justificativa na
+seção 5) — `mocks/ws_sequence/05_slack_card.json`. Carrega o
+`SlackCardPayload` **completo e pronto** em `payload.card`; P4 faz o `POST`
+desse objeto ao Incoming Webhook, uma vez por turno.
 
 **`error`** — `mocks/ws_error.json`. Nunca fecha a conexão nem quebra a UI;
 é só um aviso (ex.: RNF04 — Ambiguous fora do ar).
@@ -218,10 +318,21 @@ resultado estruturado é gravado, não o áudio/transcrição bruta).
 
 ## 5. Notificação Slack — `SlackCardPayload`
 
-Corpo do POST ao Incoming Webhook (RF09). Montado e enviado por P4 (ou
-disparado por P2 e executado por P4 — ver `intervention`/`slack_sent` acima;
-decisão de "quem faz a chamada HTTP de fato" fica com quem implementar,
-contrato do **payload** é o que está congelado aqui).
+Corpo do POST ao Incoming Webhook (RF09).
+
+**Dono do POST HTTP ao webhook: P4** (decidido na Revisão 2 — ver abaixo).
+P2 monta o payload e entrega **pronto** pelo evento WebSocket `slack_card`
+(seção 3); P4 só faz o `POST` para a URL do webhook, sem reprocessar nada.
+
+**Por quê essa mudança (Revisão 2):** o contrato anterior dizia "fica com
+quem implementar" — o resultado provável de uma responsabilidade não
+atribuída em código feito em paralelo é zero implementações (cada um assume
+que é o outro) ou duas (retrabalho, e risco de o card ir duas vezes ao
+Slack). Além disso, o evento anterior se chamava `slack_sent` e era **P4
+mandando o servidor "confirmar" a P4 que P4 mesmo tinha enviado** — circular
+e sem uso real. A solução simétrica com `intervention` (P2 dispara o evento
+com o conteúdo pronto, P4 executa a ação externa) resolve as duas coisas:
+`slack_card` carrega o card pronto, e só existe um dono do `POST` real.
 
 `mocks/slack_card_payload.json`:
 ```json
@@ -233,9 +344,10 @@ contrato do **payload** é o que está congelado aqui).
   "summary_bullets": ["Carga da Swift conectada...", "Doca 4 liberada.", "..."]
 }
 ```
-- `coverage_pct`: inteiro 0–100, calculado como `covered=true` / total de itens.
-- `summary_bullets`: lista já quebrada em bullets — quem quebra o `summary`
-  em bullets é quem monta este payload (P4), não P3.
+- `coverage_pct`: inteiro 0–100, calculado por P2 como `covered=true` / total de itens.
+- `summary_bullets`: copiado direto de `AnalyzeResponse.summary_bullets`
+  (seção 2) — **quem quebra o resumo em bullets é P3**, não quem monta este
+  payload nem quem faz o POST.
 
 ---
 

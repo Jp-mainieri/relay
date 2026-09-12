@@ -24,6 +24,10 @@ from shared.schemas import (
     AnalyzeResponse,
     ChecklistConfig,
     ChecklistConfigResponse,
+    TranscriptPostRequest,
+    TranscriptPostResponse,
+    TurnEndRequest,
+    TurnEndResponse,
 )
 
 app = FastAPI(title="Relay Orquestrador", version="0.0.1-stub")
@@ -62,11 +66,40 @@ def post_analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     return AnalyzeResponse(**load("analyze_response.json"))
 
 
+@app.post("/api/transcript", response_model=TranscriptPostResponse)
+def post_transcript(line: TranscriptPostRequest) -> TranscriptPostResponse:
+    """
+    STUB (Fase 0): valida o shape via TranscriptPostRequest e confirma
+    recebimento. Não anexa a nenhum estado real ainda.
+
+    Fase seguinte: anexar `line` (menos station_id) ao transcript_log do
+    turno em andamento da estação, ordenando por `seq`, e montar
+    AnalyzeRequest.transcript concatenando "{speaker}: {text}" por \\n na
+    ordem de `seq`.
+    """
+    return TranscriptPostResponse()
+
+
+@app.post("/api/turn/end", response_model=TurnEndResponse)
+def post_turn_end(request: TurnEndRequest) -> TurnEndResponse:
+    """
+    STUB (Fase 0): valida o shape via TurnEndRequest e confirma recebimento.
+    Não dispara nenhum evento real ainda.
+
+    Fase seguinte: ÚNICO gatilho de fim de turno — P2 não deve inferir fim
+    por timeout nem silêncio. Ao receber, rodar a análise uma última vez
+    (equivalente a POST /api/analyze) e emitir pelo WebSocket:
+      - `intervention` se is_complete=false
+      - `slack_card` sempre
+    """
+    return TurnEndResponse()
+
+
 @app.websocket("/ws/{station_id}")
 async def ws_channel(websocket: WebSocket, station_id: str) -> None:
     """
     STUB (Fase 0): ao conectar, replay da sequência fixa de mocks/ws_sequence/
-    (estado inicial -> progresso -> final -> intervenção -> slack_sent), em
+    (estado inicial -> progresso -> final -> intervenção -> slack_card), em
     loop, com um pequeno delay entre mensagens — o bastante para P4 exercitar
     a transição cinza->verde e os dois eventos únicos sem esperar o P2 real.
 
