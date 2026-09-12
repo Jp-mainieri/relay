@@ -109,10 +109,85 @@ body {
 
 .shell {
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto auto 1fr;
   height: 100dvh;
   padding: var(--safe);
   gap: var(--s-4);
+}
+
+/* ==========================================================================
+   Controles de demonstração — usam o mesmo HTTP de P1, mas dispensam terminal
+   na gravação/ensaio. Não alteram o contrato WebSocket.
+   ========================================================================== */
+
+.demo-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  min-height: 3.5rem;
+  padding: var(--s-3) var(--s-5);
+  background: var(--carbon);
+  border: var(--hairline) solid var(--graphite);
+  border-radius: var(--r-panel);
+}
+
+.demo-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.demo-label {
+  color: var(--paper);
+  font-size: var(--t-caption);
+  font-weight: var(--w-medium);
+}
+
+.demo-status {
+  color: var(--ash);
+  font-size: var(--t-caption);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.demo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  justify-content: flex-end;
+}
+
+.demo-button {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  color: var(--mist);
+  background: var(--obsidian);
+  border: var(--hairline) solid var(--smoke);
+  border-radius: var(--r-control);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--t-caption);
+}
+
+.demo-button:hover:not(:disabled) {
+  border-color: var(--covered);
+  color: var(--paper);
+}
+
+.demo-button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+.demo-button small {
+  color: var(--ash);
+  font-family: var(--mono);
+  font-size: var(--t-label);
 }
 
 .stage {
