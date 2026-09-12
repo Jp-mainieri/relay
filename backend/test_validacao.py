@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from backend.validacao import ValidationEngineError, _analisar_com_cliente, _get_client
+from backend.validacao import _ModelAnalysis, ValidationEngineError, _analisar_com_cliente, _get_client
 from shared.schemas import AnalyzeResponse
 
 
@@ -39,32 +39,49 @@ class ValidacaoTests(unittest.TestCase):
         self.response = AnalyzeResponse.model_validate_json(
             (ROOT_DIR / "mocks" / "analyze_response.json").read_text(encoding="utf-8")
         )
+        self.model_response = _ModelAnalysis(
+            checklist_status=[
+                {"item": self.response.checklist_status[0].item, "covered": True, "evidence_line": 1},
+                {"item": self.response.checklist_status[1].item, "covered": True, "evidence_line": 3},
+                {"item": self.response.checklist_status[2].item, "covered": False, "evidence_line": None},
+                {"item": self.response.checklist_status[3].item, "covered": False, "evidence_line": None},
+            ],
+            is_complete=self.response.is_complete,
+            intervention_prompt=self.response.intervention_prompt,
+            summary=self.response.summary,
+            summary_bullets=self.response.summary_bullets,
+        )
 
     def test_aceita_evidencias_literais_e_forca_sem_historico(self) -> None:
-        client = _FakeClient(self.response)
+        client = _FakeClient(self.model_response)
 
         result = _analisar_com_cliente(
             self.request["transcript"], self.request["items"], client, model="modelo-de-teste"
         )
 
         self.assertIsNone(result["ambiguous_alert"])
-        self.assertEqual(result["checklist_status"], self.response.model_dump(mode="json")["checklist_status"])
-        self.assertEqual(client.completions.kwargs["response_format"], AnalyzeResponse)
+        self.assertEqual(result["checklist_status"][0]["evidence"], "OPERADOR B: Tranquilo. A carga da Swift ja ta no plug 3, refrigerada certinha.")
+        self.assertEqual(result["checklist_status"][1]["evidence"], "OPERADOR B: Ja, liberei a doca 4 faz uns 10 minutos.")
+        self.assertEqual(client.completions.kwargs["response_format"], _ModelAnalysis)
         self.assertEqual(client.completions.kwargs["temperature"], 0)
         self.assertEqual(client.completions.kwargs["model"], "modelo-de-teste")
         sent_data = json.loads(client.completions.kwargs["messages"][1]["content"])
-        self.assertEqual(sent_data, {"checklist_items": self.request["items"], "transcript": self.request["transcript"]})
+        self.assertEqual(sent_data["checklist_items"], self.request["items"])
+        self.assertEqual(sent_data["transcript_lines"][1], {
+            "index": 1,
+            "text": "OPERADOR B: Tranquilo. A carga da Swift ja ta no plug 3, refrigerada certinha.",
+        })
 
-    def test_rejeita_falso_positivo_sem_evidencia_literal(self) -> None:
-        invalid = self.response.model_copy(deep=True)
-        invalid.checklist_status[0].evidence = "Carga refrigerada confirmada pelo sistema."
+    def test_rejeita_indice_de_evidencia_inexistente(self) -> None:
+        invalid = self.model_response.model_copy(deep=True)
+        invalid.checklist_status[0].evidence_line = 99
         client = _FakeClient(invalid)
 
-        with self.assertRaisesRegex(ValidationEngineError, "evidência literal"):
+        with self.assertRaisesRegex(ValidationEngineError, "índice de fala inexistente"):
             _analisar_com_cliente(self.request["transcript"], self.request["items"], client, model="modelo-de-teste")
 
     def test_rejeita_status_fora_da_ordem_do_checklist(self) -> None:
-        invalid = self.response.model_copy(deep=True)
+        invalid = self.model_response.model_copy(deep=True)
         invalid.checklist_status[0].item, invalid.checklist_status[1].item = (
             invalid.checklist_status[1].item,
             invalid.checklist_status[0].item,
