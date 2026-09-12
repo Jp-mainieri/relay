@@ -40,7 +40,13 @@ Ver `backend/README.md` para detalhes e o que muda na próxima fase.
 ## Setup de ambiente
 
 Copie `.env.example` para `.env` e preencha as chaves reais (`OPENAI_API_KEY`,
-`AMBIGUOUS_API_KEY`, `SLACK_WEBHOOK_URL`, chave de TTS) quando for substituir
-os stubs pela integração real. Nenhuma dessas integrações está implementada
-nesta fase — é trabalho de cada fronteira (P3 para OpenAI/Ambiguous, P4 para
-TTS/Slack).
+`AMBIGUOUS_API_KEY`, `SLACK_WEBHOOK_URL`, chave de TTS).
+
+A integração Ambiguous já está ativa quando `AMBIGUOUS_API_KEY` estiver
+configurada: o Relay consulta documentos próprios dos últimos sete dias para
+identificar reincidências e grava ao fim do turno um `AmbiguousTurnRecord`
+estruturado. Não envia áudio nem transcrição bruta. Sem chave, ou se o serviço
+falhar, o fluxo continua com `ambiguous_alert=null` (RNF04).
+
+TTS e Slack ainda são responsabilidade de P4; as chaves só são necessárias ao
+integrar essas saídas reais.

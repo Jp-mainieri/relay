@@ -61,5 +61,11 @@ turno por heurística que a Revisão 2 proíbe explicitamente.
 ## RNF04 — resiliência a falha externa
 
 Duas camadas de isolamento, nenhuma propaga exceção para fora:
-1. `backend/validation_client.py::analisar` — tenta o motor real de P3 (`backend/validacao.py`); cai para fallback de mock em qualquer falha ou ausência do módulo. Dentro do fallback, a consulta de reincidência (simulada) tem try/except própria e vira `ambiguous_alert=None` em caso de erro.
+1. `backend/validacao.py` consulta a Ambiguous depois da extração estruturada. O cliente usa `POST /api/search`, tem timeout máximo de 1,5 s e retorna `ambiguous_alert=None` se a chave estiver ausente ou a consulta falhar. O fallback de mock em `backend/validation_client.py` continua isolado e só simula esse comportamento para desenvolvimento offline.
 2. `backend/main.py::_run_validation_safe` — chama o item 1 em thread própria com try/except adicional; se mesmo assim algo escapar, emite um evento `error` no WS e mantém o último estado conhecido em vez de derrubar a ingestão.
+
+Ao fim do turno, P2 agenda a gravação assíncrona do `AmbiguousTurnRecord` por
+meio de `backend/ambiguous_client.py`. O documento leva somente o resultado
+estruturado, entidades críticas derivadas e incidentes explícitos — nunca a
+transcrição bruta nem áudio. Falha ou timeout nessa escrita emite `error` não
+fatal e não atrasa TTS, Slack nem a resposta de `POST /api/turn/end`.
