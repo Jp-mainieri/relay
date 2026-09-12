@@ -23,7 +23,15 @@ from shared.schemas import AnalyzeResponse
 
 
 DEFAULT_MODEL = "gpt-4o-mini"
-DEFAULT_TIMEOUT_SECONDS = 20.0
+
+# O orquestrador (P2) corta a chamada ao motor em VALIDATION_TIMEOUT_SECONDS
+# (8.0s, backend/main.py) e trata o estouro como falha, caindo no fallback de
+# mock. Nosso orçamento tem que caber DENTRO desse teto, senão o motor real
+# nunca chega a responder: aqui uma única tentativa de até 6s deixa ~2s de
+# folga para serialização e rede. Aumentar isto sem alinhar com P2 faz o P3
+# virar fallback permanente e invisível.
+DEFAULT_TIMEOUT_SECONDS = 6.0
+DEFAULT_MAX_RETRIES = 0
 
 _SYSTEM_INSTRUCTIONS = """\
 Você é o validador conservador de uma passagem de turno operacional.
@@ -67,7 +75,8 @@ def _get_client() -> Any:
     except ImportError as exc:  # pragma: no cover - depende do ambiente de execução
         raise ValidationEngineError("Pacote 'openai' ausente; instale backend/requirements.txt.") from exc
 
-    return OpenAI(api_key=api_key, timeout=DEFAULT_TIMEOUT_SECONDS, max_retries=1)
+    timeout = float(os.getenv("OPENAI_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS))
+    return OpenAI(api_key=api_key, timeout=timeout, max_retries=DEFAULT_MAX_RETRIES)
 
 
 def _request_payload(transcript: str, items: list[str]) -> str:
