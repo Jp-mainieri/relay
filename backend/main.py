@@ -56,6 +56,7 @@ logger = logging.getLogger("relay.main")
 # timeout (Python não mata threads) — ela termina sozinha em segundo plano;
 # o que este teto garante é que quem chamou não fica pendurado esperando.
 VALIDATION_TIMEOUT_SECONDS = 8.0
+AMBIGUOUS_WRITE_TIMEOUT_SECONDS = 1.5
 
 app = FastAPI(title="Relay Orquestrador", version="0.2.0")
 
@@ -219,6 +220,36 @@ async def _finish_turn(turn: StationTurn) -> None:
     # `slack_card` sempre dispara ao fim do turno, com o card PRONTO — P4 só
     # executa o POST ao Incoming Webhook (CONTRACTS.md secao 5, Revisão 2).
     await store.push_slack_card(turn)
+
+    # RF08 não pode atrasar TTS, Slack nem a resposta de fim de turno. O
+    # snapshot é capturado agora para não depender de uma eventual nova rodada
+    # aberta para a mesma estação enquanto a escrita externa acontece.
+    asyncio.create_task(_persist_ambiguous_safe(turn), name=f"ambiguous-turn-{turn.turn_id}")
+
+
+async def _persist_ambiguous_safe(turn: StationTurn) -> None:
+    """Grava o resultado estruturado na Ambiguous sem bloquear o fluxo principal (RNF04)."""
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                validation_client.persistir_turno,
+                station_id=turn.station_id,
+                turn_id=turn.turn_id,
+                transcript=turn.transcript_text(),
+                checklist_status=list(turn.checklist_status),
+                is_complete=turn.is_complete,
+                summary=turn.summary,
+            ),
+            timeout=AMBIGUOUS_WRITE_TIMEOUT_SECONDS,
+        )
+        if result is False:
+            await store.push_error(turn.station_id, "Falha ao gravar turno na Ambiguous — seguindo normalmente (RNF04).")
+    except asyncio.TimeoutError:
+        logger.warning("Gravação na Ambiguous excedeu %.1fs para station_id=%s", AMBIGUOUS_WRITE_TIMEOUT_SECONDS, turn.station_id)
+        await store.push_error(turn.station_id, "Ambiguous demorou demais para gravar o turno — seguindo normalmente (RNF04).")
+    except Exception:
+        logger.exception("Falha inesperada ao persistir turno na Ambiguous para station_id=%s", turn.station_id)
+        await store.push_error(turn.station_id, "Falha ao gravar turno na Ambiguous — seguindo normalmente (RNF04).")
 
 
 # ---------------------------------------------------------------------------

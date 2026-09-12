@@ -21,6 +21,7 @@ import logging
 from typing import Any, Optional
 
 from backend.mock_data import load
+from shared.schemas import ChecklistItemStatus
 
 logger = logging.getLogger("relay.validation_client")
 
@@ -28,6 +29,11 @@ try:
     from backend.validacao import analisar as _analisar_real  # motor real de P3, quando existir
 except ImportError:
     _analisar_real = None
+
+try:
+    from backend.ambiguous_client import persist_turn as _persist_turn_real
+except ImportError:
+    _persist_turn_real = None
 
 
 _CRITICAL_ENTITY_HINTS = ("empilhadeira",)  # heurística mínima do fallback; P3 decide a real
@@ -99,3 +105,29 @@ def analisar(transcricao: str, itens: list[str]) -> dict[str, Any]:
         except Exception:
             logger.exception("Motor real de validacao (P3) falhou — usando fallback de mock.")
     return _fallback_response(transcricao, itens)
+
+
+def persistir_turno(
+    *,
+    station_id: str,
+    turn_id: str,
+    transcript: str,
+    checklist_status: list[ChecklistItemStatus],
+    is_complete: bool,
+    summary: str,
+) -> Optional[bool]:
+    """Ponte P2→P3 para RF08; nunca deixa uma falha da memória escapar."""
+    if _persist_turn_real is None:
+        return None
+    try:
+        return _persist_turn_real(
+            station_id=station_id,
+            turn_id=turn_id,
+            transcript=transcript,
+            checklist_status=checklist_status,
+            is_complete=is_complete,
+            summary=summary,
+        )
+    except Exception:
+        logger.exception("Falha inesperada ao gravar turno na Ambiguous (RNF04).")
+        return False
