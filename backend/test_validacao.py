@@ -17,6 +17,8 @@ from backend.validacao import (
     ValidationEngineError,
     _analisar_com_cliente,
     _get_client,
+    _numeros,
+    _separar_bullets_ancorados,
 )
 from shared.schemas import AnalyzeResponse
 
@@ -100,6 +102,60 @@ class ValidacaoTests(unittest.TestCase):
         client = _FakeClient(invalid)
 
         with self.assertRaisesRegex(ValidationEngineError, "reordenou"):
+            _analisar_com_cliente(self.request["transcript"], self.request["items"], client, model="modelo-de-teste")
+
+
+class BulletsAncoradosTests(unittest.TestCase):
+    """`summary_bullets` vai direto para o card do Slack sem passar pela cópia
+    literal que protege `evidence` — a ancoragem numérica é o que sobra."""
+
+    setUp = ValidacaoTests.setUp  # mesmos mocks congelados, sem reexecutar os testes da classe
+
+    def test_percentual_nao_vira_o_numero_cem(self) -> None:
+        self.assertNotIn(100, _numeros("Bateria em 60 por cento."))
+        self.assertIn(100, _numeros("Checklist cem por cento coberto."))
+
+    def test_extrai_numero_por_extenso_e_em_digito(self) -> None:
+        self.assertEqual(_numeros("A dois ta em setenta"), {2, 70})
+        self.assertEqual(_numeros("Nivel de bateria: 70 e 83"), {70, 83})
+
+    def test_compoe_dezena_com_unidade_na_ordem_do_portugues(self) -> None:
+        self.assertIn(83, _numeros("a quatro em oitenta e tres"))
+
+    def test_nao_compoe_na_ordem_invertida(self) -> None:
+        # "Livre desde seis e vinte" e um horario (6:20); somar daria um 26
+        # que ninguem disse.
+        numeros = _numeros("Livre desde seis e vinte")
+        self.assertEqual(numeros, {6, 20})
+
+    def test_digito_no_bullet_casa_com_extenso_na_transcricao(self) -> None:
+        mantidos, descartados = _separar_bullets_ancorados(
+            ["Bateria em 60 por cento."], "OPERADOR B: Sessenta, mas sem forcar ela vai."
+        )
+        self.assertEqual(mantidos, ["Bateria em 60 por cento."])
+        self.assertEqual(descartados, [])
+
+    def test_bullet_com_numero_inventado_e_descartado_sem_derrubar_a_analise(self) -> None:
+        analysis = self.model_response.model_copy(deep=True)
+        analysis.summary_bullets = ["Bateria em 95 por cento.", *self.response.summary_bullets]
+        client = _FakeClient(analysis)
+
+        result = _analisar_com_cliente(
+            self.request["transcript"], self.request["items"], client, model="modelo-de-teste"
+        )
+
+        self.assertNotIn("Bateria em 95 por cento.", result["summary_bullets"])
+        self.assertEqual(result["summary_bullets"], list(self.response.summary_bullets))
+        # O resto da analise sobrevive: derrubar tudo jogaria P2 no fallback de
+        # mock, trocando um bullet ruim por um checklist inteiro ficticio.
+        self.assertEqual(len(result["checklist_status"]), len(self.request["items"]))
+
+    def test_analise_sem_nenhum_bullet_ancorado_e_recusada(self) -> None:
+        analysis = self.model_response.model_copy(deep=True)
+        analysis.summary_bullets = ["Bateria em 95 por cento.", "Doca 77 liberada."]
+        client = _FakeClient(analysis)
+
+        with self.assertRaisesRegex(ValidationEngineError, "ancorados"):
             _analisar_com_cliente(self.request["transcript"], self.request["items"], client, model="modelo-de-teste")
 
 

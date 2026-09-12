@@ -13,8 +13,10 @@ memória nunca bloqueie a ingestão (RNF04).
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import unicodedata
 from typing import Any, Optional
 
 from dotenv import load_dotenv
@@ -23,6 +25,8 @@ from backend.ambiguous_client import recurrence_alert
 from pydantic import BaseModel, Field
 
 from shared.schemas import AnalyzeResponse, ChecklistItemStatus
+
+logger = logging.getLogger("relay.validacao")
 
 
 # gpt-4o-mini errava a transcrição crítica de forma INTERMITENTE: com a mesma
@@ -209,6 +213,82 @@ def _has_literal_evidence(transcript: str, evidence: str) -> bool:
     return bool(normalized_evidence) and f" {normalized_evidence} " in f" {normalized_transcript} "
 
 
+# ---------------------------------------------------------------------------
+# Ancoragem numérica dos bullets do resumo
+#
+# `checklist_status.evidence` é protegido por cópia literal da fala (385bd91):
+# o modelo aponta o índice, o servidor copia o texto. `summary_bullets` não tem
+# nada disso — é texto livre do LLM e vai direto para o card do Slack, ou seja,
+# para o olho do gestor. Paráfrase ali é legítima e desejável ("carga a menos de
+# dezoito graus" resume bem a fala); número inventado não é.
+#
+# Daí a guarda ser numérica e não literal: exigir substring literal recusaria
+# todo bullet bem escrito. O que se exige é que cada NÚMERO citado no bullet
+# exista na transcrição — em dígito ou por extenso, já que o operador fala
+# "sessenta" e o bullet escreve "60".
+# ---------------------------------------------------------------------------
+
+_PT_ATE_DEZENOVE = {
+    "zero": 0, "um": 1, "uma": 1, "dois": 2, "duas": 2, "tres": 3, "quatro": 4,
+    "cinco": 5, "seis": 6, "meia": 6, "sete": 7, "oito": 8, "nove": 9, "dez": 10,
+    "onze": 11, "doze": 12, "treze": 13, "catorze": 14, "quatorze": 14,
+    "quinze": 15, "dezesseis": 16, "dezessete": 17, "dezoito": 18, "dezenove": 19,
+}
+_PT_DEZENAS = {
+    "vinte": 20, "trinta": 30, "quarenta": 40, "cinquenta": 50,
+    "sessenta": 60, "setenta": 70, "oitenta": 80, "noventa": 90,
+}
+_PT_CENTENAS = {"cem": 100, "cento": 100}
+
+
+def _numeros(texto: str) -> set[int]:
+    """Todo número do texto, em dígito ou por extenso.
+
+    A composição só aceita a ordem correta do português ("oitenta e três" = 83).
+    Isso não é preciosismo: "Livre desde seis e vinte" é seis e vinte (6:20),
+    não vinte e seis — somar na ordem errada inventaria um 26 que ninguém disse.
+    """
+    encontrados = {int(d) for d in re.findall(r"\d+", texto)}
+
+    palavras = re.sub(r"[^\w\s]+", " ", _sem_acento(texto)).casefold().split()
+    i = 0
+    while i < len(palavras):
+        palavra = palavras[i]
+        if palavra in _PT_CENTENAS and i > 0 and palavras[i - 1] == "por":
+            # "por cento" é unidade de medida, não o número 100 — sem isto
+            # qualquer bullet com percentual exigiria um 100 na transcrição.
+            i += 1
+            continue
+        if palavra in _PT_DEZENAS or palavra in _PT_CENTENAS:
+            base = _PT_DEZENAS.get(palavra) or _PT_CENTENAS[palavra]
+            encontrados.add(base)
+            if i + 2 < len(palavras) and palavras[i + 1] == "e":
+                resto = _PT_ATE_DEZENOVE.get(palavras[i + 2])
+                if resto is not None and resto > 0 and (palavra in _PT_CENTENAS or resto < 10):
+                    encontrados.add(base + resto)
+                    i += 3
+                    continue
+        elif palavra in _PT_ATE_DEZENOVE:
+            encontrados.add(_PT_ATE_DEZENOVE[palavra])
+        i += 1
+    return encontrados
+
+
+def _sem_acento(texto: str) -> str:
+    return unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
+
+
+def _separar_bullets_ancorados(bullets: list[str], transcript: str) -> tuple[list[str], list[str]]:
+    """Divide os bullets entre os que citam só números ditos e os que não."""
+    ditos = _numeros(transcript)
+    mantidos: list[str] = []
+    descartados: list[str] = []
+    for bullet in bullets:
+        inventados = _numeros(bullet) - ditos
+        (descartados if inventados else mantidos).append(bullet)
+    return mantidos, descartados
+
+
 def _validate_analysis(analysis: AnalyzeResponse, transcript: str, items: list[str]) -> AnalyzeResponse:
     """Impõe invariantes de negócio que o schema estrutural não consegue cobrir."""
     if len(analysis.checklist_status) != len(items):
@@ -238,8 +318,18 @@ def _validate_analysis(analysis: AnalyzeResponse, transcript: str, items: list[s
     if not analysis.summary_bullets or any(not bullet.strip() for bullet in analysis.summary_bullets):
         raise ValidationEngineError("O modelo não gerou summary_bullets utilizáveis.")
 
+    # Descarta em vez de recusar a análise inteira: um bullet com número
+    # inventado é ruim, mas derrubar a análise joga P2 no fallback de mock —
+    # e aí o checklist inteiro do card vira ficção, que é muito pior. Só
+    # quando NENHUM bullet se sustenta é que a saída é tratada como quebrada.
+    bullets, descartados = _separar_bullets_ancorados(analysis.summary_bullets, transcript)
+    for bullet in descartados:
+        logger.warning("Bullet descartado: cita número ausente da transcrição — %r", bullet)
+    if not bullets:
+        raise ValidationEngineError("Nenhum bullet do resumo tem seus números ancorados na transcrição.")
+
     # Histórico nunca vem do LLM: só o cliente Ambiguous pode preencher o alerta.
-    return analysis.model_copy(update={"ambiguous_alert": None})
+    return analysis.model_copy(update={"ambiguous_alert": None, "summary_bullets": bullets})
 
 
 def _analisar_com_cliente(
