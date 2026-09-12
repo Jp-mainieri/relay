@@ -1,0 +1,18 @@
+# Segredos
+.env
+.env.local
+*.env.local
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+.next/
+
+# Trabalho lateral (Codex) — nunca vai pra main, ver runbook-execucao.md
+/scratch/
+
+.DS_Store

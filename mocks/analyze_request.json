@@ -1,0 +1,10 @@
+{
+  "station_id": "doca-04",
+  "items": [
+    "status da carga refrigerada",
+    "liberacao da doca",
+    "nivel de bateria das empilhadeiras",
+    "avarias ou pendencias de manutencao"
+  ],
+  "transcript": "OPERADOR A: E ai, tudo certo pra fechar o turno?\nOPERADOR B: Tranquilo. A carga da Swift ja ta no plug 3, refrigerada certinha.\nOPERADOR A: Show. E a doca, ja liberou?\nOPERADOR B: Ja, liberei a doca 4 faz uns 10 minutos."
+}

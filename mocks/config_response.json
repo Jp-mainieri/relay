@@ -1,0 +1,10 @@
+{
+  "status": "ok",
+  "station_id": "doca-04",
+  "items": [
+    "status da carga refrigerada",
+    "liberacao da doca",
+    "nivel de bateria das empilhadeiras",
+    "avarias ou pendencias de manutencao"
+  ]
+}

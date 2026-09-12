@@ -1,0 +1,8 @@
+{
+  "type": "intervention",
+  "payload": {
+    "station_id": "doca-04",
+    "turn_id": "mock-turn-0001",
+    "intervention_prompt": "Atencao: antes de encerrar, confirma a bateria das empilhadeiras e se ficou alguma avaria pendente?"
+  }
+}

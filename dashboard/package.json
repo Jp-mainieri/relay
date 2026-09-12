@@ -1,0 +1,21 @@
+{
+  "name": "relay-dashboard",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Relay — Dashboard ao vivo (CopilotKit/Next.js). Fronteira de P4.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^14.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.0"
+  }
+}

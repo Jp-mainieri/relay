@@ -1,0 +1,9 @@
+{
+  "type": "slack_sent",
+  "payload": {
+    "station_id": "doca-04",
+    "turn_id": "mock-turn-0001",
+    "summary": "Doca 4 liberada e carga da Swift conectada e refrigerada. Pendencia na checagem de bateria das empilhadeiras e de avarias.",
+    "sent_at": "2026-09-12T12:00:22Z"
+  }
+}

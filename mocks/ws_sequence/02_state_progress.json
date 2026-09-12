@@ -1,0 +1,31 @@
+{
+  "type": "state",
+  "payload": {
+    "station_id": "doca-04",
+    "turn_id": "mock-turn-0001",
+    "checklist_status": [
+      {
+        "item": "status da carga refrigerada",
+        "covered": true,
+        "evidence": "A carga da Swift ja ta no plug 3, refrigerada certinha."
+      },
+      {
+        "item": "liberacao da doca",
+        "covered": true,
+        "evidence": "Ja liberei a doca 4 faz uns 10 minutos."
+      },
+      { "item": "nivel de bateria das empilhadeiras", "covered": false, "evidence": null },
+      { "item": "avarias ou pendencias de manutencao", "covered": false, "evidence": null }
+    ],
+    "is_complete": false,
+    "ambiguous_alert": "Historico: Empilhadeira 2 apresentou falha de recarga nos ultimos 2 turnos.",
+    "summary": "Doca 4 liberada e carga da Swift conectada e refrigerada.",
+    "transcript_log": [
+      { "seq": 0, "speaker": "OPERADOR A", "text": "E ai, tudo certo pra fechar o turno?", "ts": "2026-09-12T12:00:01Z" },
+      { "seq": 1, "speaker": "OPERADOR B", "text": "Tranquilo. A carga da Swift ja ta no plug 3, refrigerada certinha.", "ts": "2026-09-12T12:00:05Z" },
+      { "seq": 2, "speaker": "OPERADOR A", "text": "Show. E a doca, ja liberou?", "ts": "2026-09-12T12:00:09Z" },
+      { "seq": 3, "speaker": "OPERADOR B", "text": "Ja, liberei a doca 4 faz uns 10 minutos.", "ts": "2026-09-12T12:00:13Z" }
+    ],
+    "updated_at": "2026-09-12T12:00:13Z"
+  }
+}

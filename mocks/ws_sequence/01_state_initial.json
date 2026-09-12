@@ -1,0 +1,18 @@
+{
+  "type": "state",
+  "payload": {
+    "station_id": "doca-04",
+    "turn_id": "mock-turn-0001",
+    "checklist_status": [
+      { "item": "status da carga refrigerada", "covered": false, "evidence": null },
+      { "item": "liberacao da doca", "covered": false, "evidence": null },
+      { "item": "nivel de bateria das empilhadeiras", "covered": false, "evidence": null },
+      { "item": "avarias ou pendencias de manutencao", "covered": false, "evidence": null }
+    ],
+    "is_complete": false,
+    "ambiguous_alert": null,
+    "summary": "",
+    "transcript_log": [],
+    "updated_at": "2026-09-12T12:00:00Z"
+  }
+}

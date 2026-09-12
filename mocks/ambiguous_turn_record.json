@@ -1,0 +1,31 @@
+{
+  "station_id": "doca-04",
+  "turn_id": "mock-turn-0001",
+  "timestamp": "2026-09-12T12:00:22Z",
+  "checklist_status": [
+    {
+      "item": "status da carga refrigerada",
+      "covered": true,
+      "evidence": "A carga da Swift ja ta no plug 3, refrigerada certinha."
+    },
+    {
+      "item": "liberacao da doca",
+      "covered": true,
+      "evidence": "Ja liberei a doca 4 faz uns 10 minutos."
+    },
+    { "item": "nivel de bateria das empilhadeiras", "covered": false, "evidence": null },
+    { "item": "avarias ou pendencias de manutencao", "covered": false, "evidence": null }
+  ],
+  "is_complete": false,
+  "resolved_pending_items": [
+    "liberacao da doca"
+  ],
+  "new_incidents": [
+    {
+      "entity": "empilhadeira 2",
+      "description": "Mencionada com suspeita de falha de recarga recorrente, sem confirmacao neste turno.",
+      "severity": "media"
+    }
+  ],
+  "summary": "Doca 4 liberada e carga da Swift conectada e refrigerada. Pendencia na checagem de bateria das empilhadeiras e de avarias."
+}

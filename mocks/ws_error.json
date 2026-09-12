@@ -1,0 +1,7 @@
+{
+  "type": "error",
+  "payload": {
+    "station_id": "doca-04",
+    "message": "Falha ao consultar Ambiguous — seguindo sem alerta de reincidencia (RNF04)."
+  }
+}
