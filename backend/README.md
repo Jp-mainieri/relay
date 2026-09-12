@@ -9,6 +9,31 @@ cp .env.example .env   # preencha as chaves reais quando for integrar de verdade
 uvicorn backend.main:app --reload --port 8000
 ```
 
+## Testar
+
+```bash
+pip install -r backend/requirements-dev.txt
+
+# Suite in-process (sem subir servidor), ~2s. Cobre: turno completo/incompleto,
+# reconexão, múltiplos clientes WS, isolamento entre estações, reset via
+# /api/config, seq fora de ordem + retry, timeout e exceção do motor (RNF04),
+# /api/turn/end em duplicidade, 422/404, e o fallback de mock.
+pytest backend/tests -q
+
+# Smoke-test ponta a ponta com o player REAL de P1 (sobe o backend em :8765,
+# injeta uma transcrição de mocks/transcricoes fala por fala, escuta o WS como
+# um dashboard faria e confere os invariantes do contrato). Sai 0/1.
+python backend/scripts/smoke_test.py
+python backend/scripts/smoke_test.py --transcript mocks/transcricoes/completa_padrao.txt --delay 1
+python backend/scripts/smoke_test.py --backend-url http://localhost:8000   # contra um backend já rodando
+```
+
+A suite troca o motor de validação por um dublê determinístico (item coberto
+= texto do item aparece literalmente numa fala), porque o alvo é a
+orquestração, não a qualidade da análise — assim ela não depende de P3 nem
+de `mocks/analyze_response.json`. O fallback real de mock tem testes próprios
+em `backend/tests/test_validation_client.py`.
+
 ## Endpoints (feat/orquestrador — fluxo real, Revisão 2 dos contratos)
 
 Todos congelados em CONTRACTS.md:
