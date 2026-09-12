@@ -16,12 +16,14 @@ import json
 import logging
 import os
 import re
-from dataclasses import dataclass
+import ssl
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+import certifi
 from dotenv import load_dotenv
 
 from shared.schemas import AmbiguousTurnRecord, ChecklistItemStatus, IncidentReport
@@ -30,9 +32,14 @@ from shared.schemas import AmbiguousTurnRecord, ChecklistItemStatus, IncidentRep
 logger = logging.getLogger("relay.ambiguous")
 
 DEFAULT_BASE_URL = "https://app.ambiguous.ai"
-# A validação inteira tem orçamento de 8 segundos em P2; busca de memória é
-# complementar ao motor OpenAI e precisa terminar cedo para não virar fallback.
-DEFAULT_TIMEOUT_SECONDS = 1.5
+# A leitura ocorre no caminho da validação; deve continuar curta para não
+# atrasar a atualização do checklist. A escrita, por sua vez, ocorre depois do
+# fim de turno em uma tarefa separada: pode receber um orçamento maior sem
+# bloquear TTS, Slack ou a resposta HTTP de encerramento.
+DEFAULT_READ_TIMEOUT_SECONDS = 1.5
+DEFAULT_WRITE_TIMEOUT_SECONDS = 8.0
+MAX_READ_TIMEOUT_SECONDS = 1.5
+MAX_WRITE_TIMEOUT_SECONDS = 15.0
 RECORD_TITLE_PREFIX = "Relay | Turno |"
 
 _ENTITY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -75,12 +82,32 @@ def extract_new_incidents(transcript: str, entities: Iterable[str]) -> list[Inci
     return incidents
 
 
-def _timeout_from_env() -> float:
-    raw = os.getenv("AMBIGUOUS_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS))
+def _timeout_from_env(name: str, default: float, maximum: float) -> float:
+    raw = os.getenv(name, str(default))
     try:
-        return min(max(float(raw), 0.1), DEFAULT_TIMEOUT_SECONDS)
+        return min(max(float(raw), 0.1), maximum)
     except ValueError:
-        return DEFAULT_TIMEOUT_SECONDS
+        return default
+
+
+def _read_timeout_from_env() -> float:
+    # Mantém compatibilidade com a variável original, que sempre representou
+    # somente a leitura no caminho crítico da análise.
+    raw = os.getenv("AMBIGUOUS_READ_TIMEOUT_SECONDS") or os.getenv("AMBIGUOUS_TIMEOUT_SECONDS")
+    if raw is None:
+        return DEFAULT_READ_TIMEOUT_SECONDS
+    try:
+        return min(max(float(raw), 0.1), MAX_READ_TIMEOUT_SECONDS)
+    except ValueError:
+        return DEFAULT_READ_TIMEOUT_SECONDS
+
+
+def _write_timeout_from_env() -> float:
+    return _timeout_from_env(
+        "AMBIGUOUS_WRITE_TIMEOUT_SECONDS",
+        DEFAULT_WRITE_TIMEOUT_SECONDS,
+        MAX_WRITE_TIMEOUT_SECONDS,
+    )
 
 
 @dataclass(frozen=True)
@@ -99,7 +126,11 @@ class AmbiguousClient:
         # Aceita as duas formas naturais de configuração, com ou sem /api.
         if base_url.endswith("/api"):
             base_url = base_url[:-4]
-        return cls(api_key=api_key, base_url=base_url, timeout_seconds=_timeout_from_env())
+        return cls(api_key=api_key, base_url=base_url, timeout_seconds=_read_timeout_from_env())
+
+    def with_timeout(self, timeout_seconds: float) -> "AmbiguousClient":
+        """Cria uma visão do mesmo cliente com orçamento específico de operação."""
+        return replace(self, timeout_seconds=timeout_seconds)
 
     def _request_json(self, method: str, path: str, body: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         data = json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None
@@ -115,7 +146,11 @@ class AmbiguousClient:
             },
         )
         try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:  # nosec B310: base configurada pelo operador
+            # O Python do desktop pode não herdar a cadeia de CAs usada pelo
+            # sistema/proxy local. Usamos o bundle atualizado do certifi, mas
+            # mantemos a verificação TLS ativa (nunca ``_create_unverified_context``).
+            tls_context = ssl.create_default_context(cafile=certifi.where())
+            with urlopen(request, timeout=self.timeout_seconds, context=tls_context) as response:  # nosec B310: base configurada pelo operador
                 raw = response.read().decode("utf-8")
         except HTTPError as exc:
             raise RuntimeError(f"Ambiguous respondeu HTTP {exc.code}.") from exc
@@ -227,7 +262,9 @@ def persist_turn(
         summary=summary or "Resumo indisponível; turno registrado para auditoria.",
     )
     try:
-        client.create_turn_record(record, entities)
+        # RF08 é executado fora do caminho crítico; usa o orçamento de escrita
+        # maior em vez do teto curto reservado à consulta RF06.
+        client.with_timeout(_write_timeout_from_env()).create_turn_record(record, entities)
         return True
     except Exception:
         logger.warning("Falha não fatal ao gravar turno na Ambiguous (RNF04).", exc_info=True)

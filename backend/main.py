@@ -56,7 +56,11 @@ logger = logging.getLogger("relay.main")
 # timeout (Python não mata threads) — ela termina sozinha em segundo plano;
 # o que este teto garante é que quem chamou não fica pendurado esperando.
 VALIDATION_TIMEOUT_SECONDS = 8.0
-AMBIGUOUS_WRITE_TIMEOUT_SECONDS = 1.5
+# RF08 roda em uma tarefa separada depois da resposta de fim de turno. Logo,
+# pode esperar mais que a leitura RF06 sem afetar dashboard, TTS ou Slack.
+# O cliente Ambiguous usa 8 s por padrão; este teto externo deixa margem para
+# serialização e agenda de thread, mantendo um limite absoluto de 10 s.
+AMBIGUOUS_WRITE_TASK_TIMEOUT_SECONDS = 10.0
 
 app = FastAPI(title="Relay Orquestrador", version="0.2.0")
 
@@ -240,12 +244,16 @@ async def _persist_ambiguous_safe(turn: StationTurn) -> None:
                 is_complete=turn.is_complete,
                 summary=turn.summary,
             ),
-            timeout=AMBIGUOUS_WRITE_TIMEOUT_SECONDS,
+            timeout=AMBIGUOUS_WRITE_TASK_TIMEOUT_SECONDS,
         )
         if result is False:
             await store.push_error(turn.station_id, "Falha ao gravar turno na Ambiguous — seguindo normalmente (RNF04).")
     except asyncio.TimeoutError:
-        logger.warning("Gravação na Ambiguous excedeu %.1fs para station_id=%s", AMBIGUOUS_WRITE_TIMEOUT_SECONDS, turn.station_id)
+        logger.warning(
+            "Gravação na Ambiguous excedeu %.1fs para station_id=%s",
+            AMBIGUOUS_WRITE_TASK_TIMEOUT_SECONDS,
+            turn.station_id,
+        )
         await store.push_error(turn.station_id, "Ambiguous demorou demais para gravar o turno — seguindo normalmente (RNF04).")
     except Exception:
         logger.exception("Falha inesperada ao persistir turno na Ambiguous para station_id=%s", turn.station_id)
