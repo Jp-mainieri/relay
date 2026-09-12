@@ -23,6 +23,10 @@ from shared.schemas import AnalyzeResponse
 
 
 DEFAULT_MODEL = "gpt-4o-mini"
+# O OpenRouter usa nomes qualificados por provedor ("openai/gpt-4o-mini"), não
+# os ids curtos da OpenAI — daí o default separado.
+DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o-mini"
+DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # O orquestrador (P2) corta a chamada ao motor em VALIDATION_TIMEOUT_SECONDS
 # (8.0s, backend/main.py) e trata o estouro como falha, caindo no fallback de
@@ -63,12 +67,19 @@ class ValidationEngineError(RuntimeError):
     """Saída recusada ou inconsistente do provedor de validação."""
 
 
-def _get_client() -> Any:
-    """Cria o cliente tardiamente para não quebrar o fallback do P2 sem SDK."""
+def _get_client() -> tuple[Any, str]:
+    """Cria o cliente tardiamente para não quebrar o fallback do P2 sem SDK.
+
+    Caminho de contingência: quando ``OPENROUTER_API_KEY`` está no ambiente,
+    o motor fala com o OpenRouter (API compatível com a da OpenAI) em vez da
+    OpenAI direta — útil se a chave da OpenAI ficar sem crédito perto da demo.
+    A OpenAI continua sendo o caminho padrão; basta não definir a variável.
+
+    ATENÇÃO: o motor depende de Structured Outputs em modo `json_schema`
+    estrito, não do modo `json_object`. Nem todo modelo exposto pelo OpenRouter
+    suporta isso — confirme com o harness antes de confiar na contingência.
+    """
     load_dotenv()
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise ValidationEngineError("OPENAI_API_KEY não configurada para o motor de validação.")
 
     try:
         from openai import OpenAI
@@ -76,7 +87,26 @@ def _get_client() -> Any:
         raise ValidationEngineError("Pacote 'openai' ausente; instale backend/requirements.txt.") from exc
 
     timeout = float(os.getenv("OPENAI_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS))
-    return OpenAI(api_key=api_key, timeout=timeout, max_retries=DEFAULT_MAX_RETRIES)
+
+    openrouter_key = os.getenv("OPENROUTER_API_KEY")
+    if openrouter_key:
+        base_url = os.getenv("OPENROUTER_BASE_URL", DEFAULT_OPENROUTER_BASE_URL)
+        model = os.getenv("OPENROUTER_MODEL") or os.getenv("LLM_MODEL") or DEFAULT_OPENROUTER_MODEL
+        client = OpenAI(
+            api_key=openrouter_key,
+            base_url=base_url,
+            timeout=timeout,
+            max_retries=DEFAULT_MAX_RETRIES,
+        )
+        return client, model
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValidationEngineError(
+            "Nenhuma credencial de LLM configurada: defina OPENAI_API_KEY ou OPENROUTER_API_KEY."
+        )
+    client = OpenAI(api_key=api_key, timeout=timeout, max_retries=DEFAULT_MAX_RETRIES)
+    return client, os.getenv("OPENAI_MODEL", DEFAULT_MODEL)
 
 
 def _request_payload(transcript: str, items: list[str]) -> str:
@@ -181,6 +211,5 @@ def _analisar_com_cliente(
 
 def analisar(transcricao: str, itens: list[str]) -> dict[str, Any]:
     """Contrato P3 consumido por ``backend.validation_client``."""
-    client = _get_client()
-    model = os.getenv("OPENAI_MODEL", DEFAULT_MODEL)
+    client, model = _get_client()
     return _analisar_com_cliente(transcricao, itens, client, model=model)

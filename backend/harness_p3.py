@@ -63,6 +63,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     itens = _carregar_itens(args.config)
+    # Qual provedor respondeu importa tanto quanto o resultado: OpenAI direta e
+    # contingência OpenRouter podem divergir em Structured Outputs.
+    from backend.validacao import _get_client
+
+    try:
+        client, modelo = _get_client()
+        print(f"provedor: {client.base_url} | modelo: {modelo}")
+    except Exception as exc:
+        print(f"provedor indisponível: {exc}", file=sys.stderr)
+        return 2
+
     falhas = 0
     for arquivo in arquivos:
         transcricao = arquivo.read_text(encoding="utf-8").strip()
@@ -71,6 +82,10 @@ def main(argv: list[str] | None = None) -> int:
         except ValidationEngineError as exc:
             falhas += 1
             print(f"\n=== {arquivo.name} — ERRO ===\n  {exc}")
+            continue
+        except Exception as exc:  # rede/quota: falha numa transcrição não aborta as outras
+            falhas += 1
+            print(f"\n=== {arquivo.name} — ERRO DE INFRA ===\n  {type(exc).__name__}: {exc}")
             continue
         if args.json:
             print(f"\n=== {arquivo.name} ===")
