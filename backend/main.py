@@ -48,6 +48,15 @@ from shared.schemas import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("relay.main")
 
+# RNF04: teto de espera pelo motor de validação (real ou fallback). Cobre o
+# caso que o try/except sozinho não cobre — o motor não lança exceção, só
+# demora demais (ex: chamada à OpenAI pendurada). Sem isso, uma unica
+# requisição de /api/transcript podia ficar esperando indefinidamente.
+# Nota: asyncio.to_thread não cancela a thread de verdade ao estourar o
+# timeout (Python não mata threads) — ela termina sozinha em segundo plano;
+# o que este teto garante é que quem chamou não fica pendurado esperando.
+VALIDATION_TIMEOUT_SECONDS = 8.0
+
 app = FastAPI(title="Relay Orquestrador", version="0.2.0")
 
 # Dashboard roda em outra origem (Next.js dev server) — sem auth no MVP (RNF03).
@@ -89,10 +98,24 @@ async def _run_validation_safe(station_id: str, transcript: str, items: list[str
     NENHUMA exceção do motor de validação consiga derrubar a ingestão ou a
     conexão WebSocket. Falha aqui -> evento `error` no canal + mantém o
     último estado conhecido (não zera o progresso do checklist na demo).
+
+    Também aplica um teto de tempo (VALIDATION_TIMEOUT_SECONDS): motor que
+    não lança exceção mas simplesmente não responde é tratado do mesmo jeito
+    que uma falha — sem isso, quem chamou ficaria esperando indefinidamente.
     """
     try:
-        raw = await asyncio.to_thread(validation_client.analisar, transcript, items)
+        raw = await asyncio.wait_for(
+            asyncio.to_thread(validation_client.analisar, transcript, items),
+            timeout=VALIDATION_TIMEOUT_SECONDS,
+        )
         return AnalyzeResponse(**raw)
+    except asyncio.TimeoutError:
+        logger.warning(
+            "Motor de validacao nao respondeu em %.1fs para station_id=%s — seguindo com ultimo estado conhecido.",
+            VALIDATION_TIMEOUT_SECONDS, station_id,
+        )
+        await store.push_error(station_id, "Motor de validação demorou demais — mantendo último estado conhecido (RNF04).")
+        return None
     except Exception:
         logger.exception("Falha inesperada no motor de validacao para station_id=%s", station_id)
         await store.push_error(station_id, "Falha no motor de validação — mantendo último estado conhecido (RNF04).")
