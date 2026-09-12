@@ -28,6 +28,11 @@ schema.
 
 ```bash
 npm install
-cp ../.env.example .env.local   # NEXT_PUBLIC_API_URL, NEXT_PUBLIC_WS_URL
+cp .env.local.example .env.local
 npm run dev
 ```
+
+`.env.local.example` é o recorte do `/.env.example` que o dashboard de fato
+usa: as três `NEXT_PUBLIC_*` (API, WebSocket e estação) mais
+`SLACK_WEBHOOK_URL` e `OPENAI_API_KEY`, que ficam sem prefixo porque são lidas
+só nos route handlers — segredo com `NEXT_PUBLIC_` vaza para o browser.
