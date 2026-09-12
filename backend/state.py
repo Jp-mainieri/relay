@@ -94,31 +94,23 @@ class StationTurn:
         """
         Aplica o resultado do motor ao turno.
 
-        `checklist_status` usa merge "trava uma vez coberto": o motor
-        reanalisa a transcrição inteira a cada fala, do zero, sem lembrar o
-        que respondeu antes — e não é 100% determinístico. Isso pode fazer um
-        item que já tinha `covered=true` (com evidência real na fala) voltar
-        a `covered=false` numa chamada seguinte, mesmo a fala continuando lá,
-        palavra por palavra, na transcrição. Como a transcrição só cresce
-        (nunca perde fala), "descobrir" um item nunca é um sinal real de
-        perda de cobertura — é sempre o motor mudando de ideia. Por isso, uma
-        vez `covered=true` nesta janela do turno, o item nunca regride.
-
-        `is_complete` é recalculado a partir do checklist já travado, não
-        copiado direto do motor — senão ficaria inconsistente com o merge
-        (ex: motor diz `is_complete=false` porque ele mesmo esqueceu um item
-        que aqui continua travado como coberto).
+        `checklist_status` confia sempre na última resposta do motor, sem
+        travar itens como cobertos permanentemente. Chegamos a testar um
+        merge "trava uma vez coberto" (um item nunca regride a
+        covered=false) para evitar itens "piscando" entre coberto e não
+        coberto quando o motor reanalisa a transcrição do zero a cada fala.
+        Revertido: ao vivo, um item foi marcado covered=true com evidência
+        sendo a PERGUNTA sobre ele ("...foi confirmado?"), não a resposta —
+        e a resposta real, na fala seguinte, negava a cobertura ("Não, não
+        foi conferido"). A trava teria escondido esse falso positivo pelo
+        resto do turno. Falso positivo permanente é estritamente pior que
+        piscar: falso positivo é o erro mais grave do projeto (CONTRACTS.md),
+        e piscar pelo menos é visível e se autocorrige com mais contexto. A
+        correção de verdade é o motor (P3) validar que a evidência é sobre o
+        item certo, não só que o texto existe literalmente na transcrição.
         """
-        previous_by_item = {c.item: c for c in self.checklist_status}
-        merged: list[ChecklistItemStatus] = []
-        for status in analysis.checklist_status:
-            previous = previous_by_item.get(status.item)
-            if previous is not None and previous.covered and not status.covered:
-                merged.append(previous)
-            else:
-                merged.append(status)
-        self.checklist_status = merged
-        self.is_complete = bool(merged) and all(c.covered for c in merged)
+        self.checklist_status = analysis.checklist_status
+        self.is_complete = analysis.is_complete
         self.ambiguous_alert = analysis.ambiguous_alert
         self.summary = analysis.summary
         if analysis.summary_bullets:
