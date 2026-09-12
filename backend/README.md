@@ -9,24 +9,29 @@ cp .env.example .env   # preencha as chaves reais quando for integrar de verdade
 uvicorn backend.main:app --reload --port 8000
 ```
 
-## Endpoints (feat/orquestrador — fluxo real)
+## Endpoints (feat/orquestrador — fluxo real, Revisão 2 dos contratos)
 
-Contratos congelados (CONTRACTS.md):
+Todos congelados em CONTRACTS.md:
 - `GET /health`
 - `POST /api/config` — persiste `ChecklistConfig` em memória por `station_id` e abre um turno novo e limpo.
+- `POST /api/transcript` — ingestão de uma fala por vez de P1 (`TranscriptPostRequest`: `station_id`, `seq`, `speaker`, `text`, `ts`). Anexa ao `transcript_log` do turno ordenando por `seq` (não pela ordem de chegada do HTTP), roda a validação e empurra `state` atualizado pelo WS.
+- `POST /api/turn/end` — **único gatilho de fim de turno reconhecido pelo sistema** (`TurnEndRequest: {station_id}`). Enviado por P1 logo após a última fala. Empurra o `state` final e dispara `intervention` (só se `is_complete=false`) e `slack_card` (sempre) pelo WS. P2 não infere fim de turno por timeout/silêncio/heurística — só por esta chamada.
 - `POST /api/analyze` — chama o motor de validação de verdade (`backend/validacao.py`, P3) via `backend/validation_client.py`, com fallback para `mocks/analyze_response.json` enquanto P3 não entrega ou se o motor falhar.
-- `WS /ws/{station_id}` — push real: `state` (ao conectar e a cada mudança), `intervention`/`slack_sent` (fim do turno), `error` (falha não-fatal, ex. Ambiguous fora do ar).
+- `WS /ws/{station_id}` — push real: `state` (ao conectar e a cada mudança), `intervention`/`slack_card` (fim do turno), `error` (falha não-fatal, ex. Ambiguous fora do ar).
 
-**Aditivo, NÃO congelado** (CONTRACTS.md não define como P1 entrega transcrição ao vivo — só o formato da string `transcript`). Proposto por P2 para destravar a integração; time avisado, sujeito a ajuste se P1 já tiver assumido outro formato:
-- `POST /api/turns/{station_id}/lines` — body `{ "speaker": "OPERADOR A" | null, "text": "...", "end_of_turn": false }`. Acrescenta uma fala ao turno ativo da estação, roda a validação e empurra `state` via WS. `end_of_turn=true` força o encerramento do turno após processar a fala.
-- `POST /api/turns/{station_id}/end` — encerramento explícito do turno (sem body). Revalida com a transcrição completa, empurra `state` final e os eventos `intervention` (só se `is_complete=false`) e `slack_sent` (sempre).
-- Fim de turno também é detectado automaticamente por uma heurística de palavras-chave em `_looks_like_end_of_turn` (main.py) — best-effort para a demo, não é NLP de verdade.
-- Ambos exigem `POST /api/config` prévio para a estação (404 caso contrário). Se o turno da estação já tiver encerrado, a próxima fala ingerida abre um turno novo automaticamente (mesmo checklist).
+**Nota de migração:** a Fase 0 desta fronteira tinha proposto endpoints de
+ingestão próprios (`/api/turns/{station_id}/lines` e `/end`), fora do
+CONTRACTS.md, enquanto o contrato P1↔P2 não existia. A Revisão 2 fechou esse
+contrato oficialmente como `/api/transcript` + `/api/turn/end` (acima) — P1
+(`feat/ingestao`) já implementa contra os oficiais. Os endpoints antigos
+foram removidos (não tinham nenhum consumidor real) em vez de mantidos como
+alias, para não reintroduzir por uma porta lateral a inferência de fim de
+turno por heurística que a Revisão 2 proíbe explicitamente.
 
 ## Quem executa o quê nos eventos de fim de turno
 
-- P2 (aqui) só **emite** os eventos estruturados `intervention` e `slack_sent` pelo WebSocket — nunca chama TTS nem o webhook do Slack diretamente.
-- P4 é quem **executa**: toca o TTS ao receber `intervention`, e faz o POST ao Incoming Webhook ao receber `slack_sent` (ver CONTRACTS.md secao 3 — o contrato deixa em aberto quem faz a chamada HTTP de fato).
+- P2 (aqui) só **emite** os eventos estruturados `intervention` e `slack_card` pelo WebSocket — nunca chama TTS nem o webhook do Slack diretamente.
+- P4 é quem **executa**: toca o TTS ao receber `intervention`, e faz o `POST` do `payload.card` (`SlackCardPayload`, já pronto) ao Incoming Webhook ao receber `slack_card` (CONTRACTS.md secao 5, Revisão 2 — dono do POST HTTP é P4).
 
 ## RNF04 — resiliência a falha externa
 

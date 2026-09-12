@@ -24,5 +24,11 @@
   "is_complete": false,
   "intervention_prompt": "Atencao: antes de encerrar, confirma a bateria das empilhadeiras e se ficou alguma avaria pendente?",
   "ambiguous_alert": "Historico: Empilhadeira 2 apresentou falha de recarga nos ultimos 2 turnos.",
-  "summary": "Doca 4 liberada e carga da Swift conectada e refrigerada. Pendencia na checagem de bateria das empilhadeiras e de avarias."
+  "summary": "Doca 4 liberada e carga da Swift conectada e refrigerada. Pendencia na checagem de bateria das empilhadeiras e de avarias.",
+  "summary_bullets": [
+    "Carga da Swift conectada e refrigerada no plug 3.",
+    "Doca 4 liberada.",
+    "Pendente: checagem de bateria das empilhadeiras.",
+    "Pendente: checagem de avarias/manutencao."
+  ]
 }

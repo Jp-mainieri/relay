@@ -82,6 +82,7 @@ def _fallback_response(transcript: str, items: list[str]) -> dict[str, Any]:
         "intervention_prompt": None if is_complete else mock.get("intervention_prompt"),
         "ambiguous_alert": _mock_ambiguous_alert(transcript),
         "summary": mock.get("summary", ""),
+        "summary_bullets": mock.get("summary_bullets", []),
     }
 
 

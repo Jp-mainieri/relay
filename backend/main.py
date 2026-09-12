@@ -1,22 +1,19 @@
 """
-Relay — Orquestrador FastAPI (feat/orquestrador · fluxo real).
+Relay — Orquestrador FastAPI (feat/orquestrador · fluxo real, Revisão 2 dos contratos).
 
-Substitui os stubs da Fase 0 pela lógica de negócio:
-  1. POST /api/config          — persiste o checklist da estação em memória e abre um turno novo.
-  2. POST /api/turns/{id}/lines — ingestão de transcrição contínua vinda de P1 (ver nota abaixo).
-  3. POST /api/turns/{id}/end   — gatilho explícito de fim de turno (ver nota abaixo).
-  4. POST /api/analyze          — mesmo contrato da Fase 0, agora chamando o motor de validação de verdade.
-  5. WS   /ws/{station_id}      — push real de `state`/`intervention`/`slack_sent`/`error` (CONTRACTS.md secao 3).
+Endpoints:
+  1. POST /api/config       — persiste o checklist da estação em memória e abre um turno novo.
+  2. POST /api/transcript   — ingestão de uma fala por vez, vinda de P1 (CONTRACTS.md secao 2.5).
+  3. POST /api/turn/end     — ÚNICO gatilho de fim de turno, vindo de P1 (CONTRACTS.md secao 2.6).
+  4. POST /api/analyze      — mesmo contrato da Fase 0, agora chamando o motor de validação de verdade.
+  5. WS   /ws/{station_id}  — push real de `state`/`intervention`/`slack_card`/`error` (CONTRACTS.md secao 3).
 
-NOTA — endpoints de ingestão (`/api/turns/...`) NÃO estão no CONTRACTS.md
-congelado: o documento define o *formato* da string `transcript` (AnalyzeRequest),
-mas não como P1 entrega isso ao orquestrador ao vivo, nem como o fim de turno é
-sinalizado. São adições aditivas desta fronteira (P2), documentadas em
-backend/README.md — avisar o time (em especial P1) antes de dar como fechado.
+Disparo de TTS e do POST ao webhook do Slack continuam sendo executados por
+P4; este módulo só emite os eventos estruturados (`intervention`, `slack_card`)
+pelo WebSocket, nunca chama serviço externo diretamente.
 
-Disparo de TTS e do webhook do Slack continuam sendo executados por P4; este
-módulo só emite os eventos estruturados (`intervention`, `slack_sent`) pelo
-WebSocket, nunca chama serviço externo diretamente.
+P2 NÃO infere fim de turno por timeout/silêncio/heurística de texto —
+`POST /api/turn/end` é o único gatilho reconhecido (CONTRACTS.md secao 2.6).
 """
 
 from __future__ import annotations
@@ -40,6 +37,10 @@ from shared.schemas import (
     AnalyzeResponse,
     ChecklistConfig,
     ChecklistConfigResponse,
+    TranscriptPostRequest,
+    TranscriptPostResponse,
+    TurnEndRequest,
+    TurnEndResponse,
     TurnState,
     WSStateMessage,
 )
@@ -47,7 +48,7 @@ from shared.schemas import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("relay.main")
 
-app = FastAPI(title="Relay Orquestrador", version="0.1.0")
+app = FastAPI(title="Relay Orquestrador", version="0.2.0")
 
 # Dashboard roda em outra origem (Next.js dev server) — sem auth no MVP (RNF03).
 app.add_middleware(
@@ -56,27 +57,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Frases que, ao aparecerem no FIM de uma fala, disparam o fim de turno
-# automaticamente — heurística mínima de demo (item 4 da tarefa: "detecte o
-# gatilho de encerramento"). P1 também pode sinalizar explicitamente via
-# `end_of_turn=true` no corpo de /api/turns/{id}/lines, ou chamar
-# /api/turns/{id}/end direto — os três caminhos convergem no mesmo fluxo.
-_END_OF_TURN_HINTS = (
-    "até amanhã",
-    "ate amanha",
-    "falou",
-    "valeu, até",
-    "fechado por aqui",
-    "encerrando",
-    "câmbio desligo",
-    "cambio desligo",
-)
-
-
-def _looks_like_end_of_turn(text: str) -> bool:
-    lowered = text.lower()
-    return any(hint in lowered for hint in _END_OF_TURN_HINTS)
 
 
 @app.get("/health")
@@ -136,26 +116,51 @@ async def post_analyze(request: AnalyzeRequest) -> AnalyzeResponse:
             intervention_prompt=None,
             ambiguous_alert=None,
             summary="",
+            summary_bullets=[],
         )
     return result
 
 
 # ---------------------------------------------------------------------------
-# 4. Ingestão de transcrição (P1 -> P2) — ADITIVO, ver nota no topo do arquivo
+# 4. POST /api/transcript — ingestão de fala (P1 -> P2), CONTRACTS.md secao 2.5
 # ---------------------------------------------------------------------------
 
 
-class IngestLineRequest(BaseModel):
-    """
-    Body de POST /api/turns/{station_id}/lines.
+def _require_turn(station_id: str) -> StationTurn:
+    turn = store.active_turn(station_id)
+    if turn is None:
+        raise HTTPException(status_code=404, detail="Estacao sem checklist configurado — chame POST /api/config antes.")
+    return turn
 
-    NÃO é um contrato congelado do CONTRACTS.md — proposto por P2 para
-    destravar a integração com P1 enquanto o time não fecha algo diferente.
-    """
 
-    speaker: Optional[str] = None
-    text: str
-    end_of_turn: bool = False
+@app.post("/api/transcript", response_model=TranscriptPostResponse)
+async def post_transcript(line: TranscriptPostRequest) -> TranscriptPostResponse:
+    async with store.lock_for(line.station_id):
+        turn = _require_turn(line.station_id)
+        turn.upsert_line(line.seq, line.speaker, line.text, line.ts)
+
+        result = await _run_validation_safe(line.station_id, turn.transcript_text(), turn.items)
+        if result is not None:
+            turn.apply_analysis(result)
+        await store.push_state(turn)
+
+    return TranscriptPostResponse()
+
+
+# ---------------------------------------------------------------------------
+# 5. POST /api/turn/end — ÚNICO gatilho de fim de turno, CONTRACTS.md secao 2.6
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/turn/end", response_model=TurnEndResponse)
+async def post_turn_end(request: TurnEndRequest) -> TurnEndResponse:
+    async with store.lock_for(request.station_id):
+        turn = store.current_turn(request.station_id)
+        if turn is None:
+            raise HTTPException(status_code=404, detail="Estacao sem checklist configurado — chame POST /api/config antes.")
+        await _finish_turn(turn)
+
+    return TurnEndResponse()
 
 
 async def _finish_turn(turn: StationTurn) -> None:
@@ -164,12 +169,12 @@ async def _finish_turn(turn: StationTurn) -> None:
     eventos estruturados de encerramento — quem efetivamente toca o TTS e
     chama o webhook do Slack é P4.
 
-    Não revalida aqui: toda ingestão de fala (`ingest_line`) já roda a
-    validação com a transcrição completa antes de retornar, então o estado do
-    turno já está atualizado com a última fala no momento em que o fim é
-    detectado. Uma estação encerrada sem nenhuma fala ingerida (`/end` chamado
-    direto após `/api/config`) mantém o checklist zerado, que já é o estado
-    correto para "nada foi dito ainda".
+    Não revalida aqui: toda ingestão de fala (`POST /api/transcript`) já roda
+    a validação com a transcrição completa antes de retornar, então o estado
+    do turno já está atualizado com a última fala no momento em que
+    `POST /api/turn/end` chega. Uma estação encerrada sem nenhuma fala
+    ingerida mantém o checklist zerado, que já é o estado correto para "nada
+    foi dito ainda".
     """
     if turn.ended:
         return
@@ -188,43 +193,13 @@ async def _finish_turn(turn: StationTurn) -> None:
         turn.intervention_sent = True
         await store.push_intervention(turn, prompt)
 
-    # `slack_sent` sempre dispara ao fim do turno — é o sinal estruturado que
-    # P4 usa para executar o POST ao Incoming Webhook (contrato deixa em
-    # aberto quem faz a chamada HTTP; aqui P2 nunca chama, só sinaliza).
-    await store.push_slack_sent(turn)
-
-
-@app.post("/api/turns/{station_id}/lines", response_model=TurnState)
-async def ingest_line(station_id: str, line: IngestLineRequest) -> TurnState:
-    async with store.lock_for(station_id):
-        turn = store.active_turn(station_id)
-        if turn is None:
-            raise HTTPException(status_code=404, detail="Estacao sem checklist configurado — chame POST /api/config antes.")
-
-        turn.append_line(line.speaker, line.text)
-        result = await _run_validation_safe(station_id, turn.transcript_text(), turn.items)
-        if result is not None:
-            turn.apply_analysis(result)
-        await store.push_state(turn)
-
-        if line.end_of_turn or _looks_like_end_of_turn(line.text):
-            await _finish_turn(turn)
-
-        return turn.to_state()
-
-
-@app.post("/api/turns/{station_id}/end", response_model=TurnState)
-async def end_turn(station_id: str) -> TurnState:
-    async with store.lock_for(station_id):
-        turn = store.current_turn(station_id)
-        if turn is None:
-            raise HTTPException(status_code=404, detail="Estacao sem checklist configurado — chame POST /api/config antes.")
-        await _finish_turn(turn)
-        return turn.to_state()
+    # `slack_card` sempre dispara ao fim do turno, com o card PRONTO — P4 só
+    # executa o POST ao Incoming Webhook (CONTRACTS.md secao 5, Revisão 2).
+    await store.push_slack_card(turn)
 
 
 # ---------------------------------------------------------------------------
-# 5. WS /ws/{station_id} — push real (CONTRACTS.md secao 3)
+# 6. WS /ws/{station_id} — push real (CONTRACTS.md secao 3)
 # ---------------------------------------------------------------------------
 
 

@@ -30,6 +30,8 @@ uvicorn backend.main:app --reload --port 8000
 
 Testado e respondendo de verdade:
 - `POST http://localhost:8000/api/config`
+- `POST http://localhost:8000/api/transcript`
+- `POST http://localhost:8000/api/turn/end`
 - `POST http://localhost:8000/api/analyze`
 - `ws://localhost:8000/ws/{station_id}`
 

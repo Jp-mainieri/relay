@@ -3,12 +3,12 @@ Relay — Orquestrador (P2): estado do turno em memória.
 
 Sem banco no MVP (ver 05-arquitetura.md) — um turno ativo por estação,
 guardado em memória do processo, mais o registro dos WebSockets conectados
-por estação para poder empurrar `state`/`intervention`/`slack_sent`/`error`
-(ver CONTRACTS.md, seção 3) a quem estiver ouvindo.
+por estação para poder empurrar `state`/`intervention`/`slack_card`/`error`
+(ver CONTRACTS.md, seção 3, Revisão 2) a quem estiver ouvindo.
 
 Nada aqui é contrato congelado — é implementação interna da fronteira do
 orquestrador (P2). Os *payloads* que saem daqui (TurnState, InterventionPayload,
-SlackSentPayload, ErrorPayload) são os tipos congelados de `shared/schemas.py`.
+SlackCardMessagePayload, ErrorPayload) são os tipos congelados de `shared/schemas.py`.
 """
 
 from __future__ import annotations
@@ -26,12 +26,13 @@ from shared.schemas import (
     ChecklistItemStatus,
     ErrorPayload,
     InterventionPayload,
-    SlackSentPayload,
+    SlackCardMessagePayload,
+    SlackCardPayload,
     TranscriptLine,
     TurnState,
     WSErrorMessage,
     WSInterventionMessage,
-    WSSlackSentMessage,
+    WSSlackCardMessage,
     WSStateMessage,
     new_turn_id,
 )
@@ -54,10 +55,11 @@ class StationTurn:
     is_complete: bool = False
     ambiguous_alert: Optional[str] = None
     summary: str = ""
+    summary_bullets: list[str] = field(default_factory=list)
     intervention_prompt: Optional[str] = None
-    transcript_log: list[TranscriptLine] = field(default_factory=list)
     ended: bool = False
     intervention_sent: bool = False
+    _lines_by_seq: dict[int, TranscriptLine] = field(default_factory=dict, repr=False)
 
     @classmethod
     def start(cls, station_id: str, items: list[str]) -> "StationTurn":
@@ -67,13 +69,22 @@ class StationTurn:
             checklist_status=[ChecklistItemStatus(item=i, covered=False, evidence=None) for i in items],
         )
 
-    def append_line(self, speaker: Optional[str], text: str) -> TranscriptLine:
-        line = TranscriptLine(seq=len(self.transcript_log), speaker=speaker, text=text, ts=_utcnow())
-        self.transcript_log.append(line)
+    def upsert_line(self, seq: int, speaker: Optional[str], text: str, ts: datetime) -> TranscriptLine:
+        """
+        Insere (ou substitui, se `seq` já existia — retry idempotente de P1)
+        uma fala pelo `seq` que P1 atribuiu. `seq` é a fonte da verdade de
+        ordem (CONTRACTS.md secao 2.5), não a ordem de chegada do HTTP.
+        """
+        line = TranscriptLine(seq=seq, speaker=speaker, text=text, ts=ts)
+        self._lines_by_seq[seq] = line
         return line
 
+    @property
+    def transcript_log(self) -> list[TranscriptLine]:
+        return [self._lines_by_seq[seq] for seq in sorted(self._lines_by_seq)]
+
     def transcript_text(self) -> str:
-        """Formato definido em CONTRACTS.md: 'LOCUTOR: fala', uma por linha."""
+        """Formato definido em CONTRACTS.md secao 2.5: 'LOCUTOR: fala', uma por linha, ordenado por seq."""
         lines = []
         for l in self.transcript_log:
             lines.append(f"{l.speaker}: {l.text}" if l.speaker else l.text)
@@ -84,8 +95,26 @@ class StationTurn:
         self.is_complete = analysis.is_complete
         self.ambiguous_alert = analysis.ambiguous_alert
         self.summary = analysis.summary
+        if analysis.summary_bullets:
+            self.summary_bullets = analysis.summary_bullets
         if analysis.intervention_prompt:
             self.intervention_prompt = analysis.intervention_prompt
+
+    def coverage_pct(self) -> int:
+        if not self.checklist_status:
+            return 0
+        covered = sum(1 for c in self.checklist_status if c.covered)
+        return round(100 * covered / len(self.checklist_status))
+
+    def to_slack_card(self) -> SlackCardPayload:
+        bullets = self.summary_bullets or ([self.summary] if self.summary else [])
+        return SlackCardPayload(
+            station_id=self.station_id,
+            timestamp=_utcnow(),
+            coverage_pct=self.coverage_pct(),
+            ambiguous_alert=self.ambiguous_alert,
+            summary_bullets=bullets,
+        )
 
     def to_state(self) -> TurnState:
         return TurnState(
@@ -181,9 +210,13 @@ class StationStore:
         payload = InterventionPayload(station_id=turn.station_id, turn_id=turn.turn_id, intervention_prompt=prompt)
         await self._broadcast(turn.station_id, WSInterventionMessage(payload=payload).model_dump(mode="json"))
 
-    async def push_slack_sent(self, turn: StationTurn) -> None:
-        payload = SlackSentPayload(station_id=turn.station_id, turn_id=turn.turn_id, summary=turn.summary)
-        await self._broadcast(turn.station_id, WSSlackSentMessage(payload=payload).model_dump(mode="json"))
+    async def push_slack_card(self, turn: StationTurn) -> None:
+        """
+        `slack_card` (renomeado de `slack_sent` na Revisão 2): P2 monta e
+        entrega o SlackCardPayload PRONTO; P4 só faz o POST ao webhook.
+        """
+        payload = SlackCardMessagePayload(station_id=turn.station_id, turn_id=turn.turn_id, card=turn.to_slack_card())
+        await self._broadcast(turn.station_id, WSSlackCardMessage(payload=payload).model_dump(mode="json"))
 
     async def push_error(self, station_id: str, message: str) -> None:
         payload = ErrorPayload(station_id=station_id, message=message)
