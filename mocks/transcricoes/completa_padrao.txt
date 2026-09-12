@@ -1,0 +1,18 @@
+OPERADOR A: Última passada: tá tranquilo?
+OPERADOR B: Tá, só a nove ficou esperando conferência.
+OPERADOR A: A carga congelada tá onde?
+OPERADOR B: No plug cinco, painel marcando menos de dezoito.
+OPERADOR A: Certinho. A oito já pode receber?
+OPERADOR B: Pode. Caminhão saiu, calço recolhido, piso seco.
+OPERADOR A: As máquinas seguram a madrugada?
+OPERADOR B: A dois tá em setenta, a quatro em oitenta e três.
+OPERADOR A: E a cinco?
+OPERADOR B: Sessenta, mas sem fazer força demais ela vai.
+OPERADOR A: Teve batida em produto?
+OPERADOR B: Dois fardos de refrigerante ficaram molhados porque uma garrafa abriu.
+OPERADOR A: Foi separado?
+OPERADOR B: Foi, e o restante tá íntegro.
+OPERADOR A: Alguma máquina pedindo atenção?
+OPERADOR B: A quatro tá com farol traseiro apagado.
+OPERADOR A: Anota pra oficina olhar amanhã.
+OPERADOR B: Já deixei no livro. Boa noite aí.

@@ -1,0 +1,18 @@
+OPERADOR A: Tá me ouvindo?
+OPERADOR B: Tô, fala. O rádio tá falhando hoje.
+OPERADOR A: A carga de iogurte ficou certinha?
+OPERADOR B: Ficou no plug quatro, tudo fechado, marcador em dois graus.
+OPERADOR A: Beleza. E a doca cinco?
+OPERADOR B: Livre desde seis e vinte. Motorista assinou e vazou.
+OPERADOR A: Tem alguém pra varrer lá?
+OPERADOR B: O Davi passou agora, tá limpa.
+OPERADOR A: As empilhadeiras como tão?
+OPERADOR B: A um, boa. A três, boa. A empilhadeira 2 é que tá com problema de recarga de novo.
+OPERADOR A: Ainda não segura?
+OPERADOR B: Você põe no cabo, acende verde, mas sobe quase nada.
+OPERADOR A: Então não manda ela pra operação pesada.
+OPERADOR B: Já deixei com etiqueta e avisei manutenção.
+OPERADOR A: Teve mais alguma bronca?
+OPERADOR B: Um rodízio da dois tá meio solto também.
+OPERADOR A: Aí complicou, deixa parada mesmo.
+OPERADOR B: Foi o que fiz.
