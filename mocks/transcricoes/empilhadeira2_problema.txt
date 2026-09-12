@@ -1,12 +1,12 @@
-OPERADOR A: Checklist: o status da carga refrigerada de iogurte foi confirmado?
+OPERADOR A: Vamos registrar os itens críticos desta passagem de turno.
 OPERADOR B: Status da carga refrigerada confirmado: a carga de iogurte está no plug quatro, fechada, com marcador em dois graus.
-OPERADOR A: A liberação da doca cinco foi confirmada?
+OPERADOR A: Próximo item do checklist.
 OPERADOR B: Liberação da doca cinco confirmada: ela está livre desde seis e vinte e o motorista assinou a saída.
-OPERADOR A: Qual é o nível de bateria das empilhadeiras?
+OPERADOR A: Próximo item do checklist.
 OPERADOR B: A bateria da empilhadeira um está boa e a bateria da empilhadeira três está boa. A empilhadeira dois tem problema de recarga de novo.
-OPERADOR A: Qual é exatamente a pendência da empilhadeira dois?
+OPERADOR A: Registre o detalhe da pendência.
 OPERADOR B: Pendência de manutenção da empilhadeira dois: no cabo ela acende verde, mas a bateria quase não carrega. Ela foi etiquetada e a manutenção foi avisada.
-OPERADOR A: Há outra avaria de equipamento?
+OPERADOR A: Há outro detalhe de manutenção?
 OPERADOR B: Há uma avaria: o rodízio da empilhadeira dois está meio solto; ela ficou parada para não ir à operação pesada.
-OPERADOR A: Confirmado, vou registrar as pendências de manutenção da empilhadeira dois.
+OPERADOR A: Encerrando o registro da empilhadeira dois.
 OPERADOR B: Confirmado.

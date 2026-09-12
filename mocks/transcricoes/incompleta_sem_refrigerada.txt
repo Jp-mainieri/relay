@@ -1,10 +1,10 @@
-OPERADOR A: Checklist: o status da carga refrigerada foi confirmado?
+OPERADOR A: Vamos registrar os itens críticos desta passagem de turno.
 OPERADOR B: Não. O status da carga refrigerada não foi conferido neste turno e não deve ser marcado como confirmado.
-OPERADOR A: A liberação da doca sete foi confirmada?
+OPERADOR A: Próximo item do checklist.
 OPERADOR B: Liberação da doca sete confirmada: ela está pronta, sem carreta e com o piso limpo.
-OPERADOR A: Qual é o nível de bateria das empilhadeiras?
+OPERADOR A: Próximo item do checklist.
 OPERADOR B: Nível de bateria confirmado: a bateria da Jungheinrich um está em noventa por cento e a bateria da empilhadeira quatro está em setenta e cinco por cento.
-OPERADOR A: Há avarias ou pendências de manutenção?
+OPERADOR A: Último item do checklist.
 OPERADOR B: Há uma avaria registrada: um saco de ração rasgou na doca oito, foi recolhido e o conferente assinou o registro.
-OPERADOR A: Então falta somente confirmar a carga refrigerada.
+OPERADOR A: Encerrando a passagem.
 OPERADOR B: Confirmado: a carga refrigerada continua pendente de conferência.
