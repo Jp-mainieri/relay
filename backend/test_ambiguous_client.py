@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from backend.ambiguous_client import (
     AmbiguousClient,
     RECORD_TITLE_PREFIX,
+    _read_timeout_from_env,
+    _write_timeout_from_env,
     extract_critical_entities,
     extract_new_incidents,
 )
@@ -63,6 +65,27 @@ class AmbiguousClientTests(unittest.TestCase):
         self.assertIn("empilhadeira 2", body["title"])
         self.assertIn('"turn_id": "turn-1"', body["content"])
         self.assertNotIn("OPERADOR", body["content"])
+
+    def test_requisicao_usa_bundle_de_ca_verificado(self) -> None:
+        response = MagicMock()
+        response.read.return_value = b'{"id": "doc-1"}'
+        with patch("backend.ambiguous_client.urlopen") as opener:
+            opener.return_value.__enter__.return_value = response
+            self.client._request_json("POST", "/api/documents", {"type": "doc"})
+
+        self.assertIsNotNone(opener.call_args.kwargs["context"])
+
+    def test_leitura_permanece_limitada_e_escrita_ganha_orcamento_proprio(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "AMBIGUOUS_READ_TIMEOUT_SECONDS": "9",
+                "AMBIGUOUS_WRITE_TIMEOUT_SECONDS": "8",
+            },
+            clear=False,
+        ):
+            self.assertEqual(_read_timeout_from_env(), 1.5)
+            self.assertEqual(_write_timeout_from_env(), 8.0)
 
 
 if __name__ == "__main__":

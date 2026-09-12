@@ -29,10 +29,15 @@ from shared.schemas import AnalyzeResponse, ChecklistItemStatus
 logger = logging.getLogger("relay.validacao")
 
 
-DEFAULT_MODEL = "gpt-4o-mini"
-# O OpenRouter usa nomes qualificados por provedor ("openai/gpt-4o-mini"), não
+# gpt-4o-mini errava a transcrição crítica de forma INTERMITENTE: com a mesma
+# entrada e temperature=0, ora marcava o turno como completo (falso positivo:
+# "carga refrigerada" coberta por uma fala sobre bateria de empilhadeira), ora
+# acertava. Falso positivo é o pior erro possível aqui, e intermitente é pior
+# ainda — não dá para confiar nem para reproduzir. gpt-4.1-mini acerta.
+DEFAULT_MODEL = "gpt-4.1-mini"
+# O OpenRouter usa nomes qualificados por provedor ("openai/gpt-4.1-mini"), não
 # os ids curtos da OpenAI — daí o default separado.
-DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o-mini"
+DEFAULT_OPENROUTER_MODEL = "openai/gpt-4.1-mini"
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # O orquestrador (P2) corta a chamada ao motor em VALIDATION_TIMEOUT_SECONDS
@@ -43,6 +48,13 @@ DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # virar fallback permanente e invisível.
 DEFAULT_TIMEOUT_SECONDS = 6.0
 DEFAULT_MAX_RETRIES = 0
+
+# Sem um teto explícito, o OpenRouter RESERVA o max_tokens máximo do modelo
+# (65536) contra o saldo da conta e recusa a chamada com 402 "requires more
+# credits" — mesmo havendo saldo de sobra para o que a resposta realmente
+# consome. Foi o que bloqueou a troca de modelo por horas, diagnosticado como
+# falta de crédito. Este teto é folgado: a resposta real usa ~400 tokens.
+DEFAULT_MAX_TOKENS = 2000
 
 _SYSTEM_INSTRUCTIONS = """\
 Você é o validador conservador de uma passagem de turno operacional.
@@ -343,6 +355,7 @@ def _analisar_com_cliente(
         # Determinismo é desejável aqui, mas as famílias mais novas aceitam
         # apenas a temperatura padrão e rejeitam o parâmetro com 400.
         "temperature": 0,
+        "max_tokens": int(os.getenv("OPENAI_MAX_TOKENS", DEFAULT_MAX_TOKENS)),
     }
     try:
         completion = client.chat.completions.parse(**kwargs)

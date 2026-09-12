@@ -91,6 +91,24 @@ class StationTurn:
         return "\n".join(lines)
 
     def apply_analysis(self, analysis: AnalyzeResponse) -> None:
+        """
+        Aplica o resultado do motor ao turno.
+
+        `checklist_status` confia sempre na última resposta do motor, sem
+        travar itens como cobertos permanentemente. Chegamos a testar um
+        merge "trava uma vez coberto" (um item nunca regride a
+        covered=false) para evitar itens "piscando" entre coberto e não
+        coberto quando o motor reanalisa a transcrição do zero a cada fala.
+        Revertido: ao vivo, um item foi marcado covered=true com evidência
+        sendo a PERGUNTA sobre ele ("...foi confirmado?"), não a resposta —
+        e a resposta real, na fala seguinte, negava a cobertura ("Não, não
+        foi conferido"). A trava teria escondido esse falso positivo pelo
+        resto do turno. Falso positivo permanente é estritamente pior que
+        piscar: falso positivo é o erro mais grave do projeto (CONTRACTS.md),
+        e piscar pelo menos é visível e se autocorrige com mais contexto. A
+        correção de verdade é o motor (P3) validar que a evidência é sobre o
+        item certo, não só que o texto existe literalmente na transcrição.
+        """
         self.checklist_status = analysis.checklist_status
         self.is_complete = analysis.is_complete
         self.ambiguous_alert = analysis.ambiguous_alert

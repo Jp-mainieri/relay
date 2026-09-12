@@ -46,3 +46,23 @@ def test_falha_de_persistencia_emite_erro_sem_lancar(monkeypatch):
     asyncio.run(main._persist_ambiguous_safe(_turn()))
 
     assert errors == [("doca-04", "Falha ao gravar turno na Ambiguous — seguindo normalmente (RNF04).")]
+
+
+def test_timeout_de_escrita_emite_erro_sem_bloquear(monkeypatch):
+    errors = []
+
+    def persistir(**kwargs):
+        import time
+
+        time.sleep(0.03)
+        return True
+
+    async def push_error(station_id: str, message: str):
+        errors.append((station_id, message))
+
+    monkeypatch.setattr(main, "AMBIGUOUS_WRITE_TASK_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(main.validation_client, "persistir_turno", persistir)
+    monkeypatch.setattr(main.store, "push_error", push_error)
+    asyncio.run(main._persist_ambiguous_safe(_turn()))
+
+    assert errors == [("doca-04", "Ambiguous demorou demais para gravar o turno — seguindo normalmente (RNF04).")]

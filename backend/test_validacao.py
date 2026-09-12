@@ -10,6 +10,9 @@ from types import SimpleNamespace
 from unittest import mock
 
 from backend.validacao import (
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_MODEL,
+    DEFAULT_OPENROUTER_MODEL,
     _ModelAnalysis,
     ValidationEngineError,
     _analisar_com_cliente,
@@ -71,6 +74,9 @@ class ValidacaoTests(unittest.TestCase):
         self.assertEqual(result["checklist_status"][1]["evidence"], "OPERADOR B: Ja, liberei a doca 4 faz uns 10 minutos.")
         self.assertEqual(client.completions.kwargs["response_format"], _ModelAnalysis)
         self.assertEqual(client.completions.kwargs["temperature"], 0)
+        # Sem teto explícito o OpenRouter reserva o max_tokens do modelo inteiro
+        # contra o saldo e recusa com 402 — ver comentário em validacao.py.
+        self.assertEqual(client.completions.kwargs["max_tokens"], DEFAULT_MAX_TOKENS)
         self.assertEqual(client.completions.kwargs["model"], "modelo-de-teste")
         sent_data = json.loads(client.completions.kwargs["messages"][1]["content"])
         self.assertEqual(sent_data["checklist_items"], self.request["items"])
@@ -181,12 +187,12 @@ class SelecaoDeProvedorTests(unittest.TestCase):
 
     def test_usa_openai_por_padrao(self) -> None:
         _, model = _get_client()
-        self.assertEqual(model, "gpt-4o-mini")
+        self.assertEqual(model, DEFAULT_MODEL)
 
     def test_usa_openrouter_quando_a_credencial_existe(self) -> None:
         os.environ["OPENROUTER_API_KEY"] = "chave-openrouter-de-teste"
         client, model = _get_client()
-        self.assertEqual(model, "openai/gpt-4o-mini")
+        self.assertEqual(model, DEFAULT_OPENROUTER_MODEL)
         self.assertIn("openrouter.ai", str(client.base_url))
 
     def test_sem_nenhuma_credencial_falha_explicitamente(self) -> None:

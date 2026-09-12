@@ -1,18 +1,10 @@
-OPERADOR A: Bom dia, parceiro. Passa aí.
-OPERADOR B: A sete tá pronta, sem carreta e sem sujeira no piso.
-OPERADOR A: Maravilha. O pessoal do almoço já voltou?
-OPERADOR B: Metade voltou, metade tá enrolando ainda, né.
-OPERADOR A: Normal. A Jungheinrich um tá com carga boa?
-OPERADOR B: Tá noventa, saiu do cabo agora.
-OPERADOR A: E a quatro?
-OPERADOR B: Setenta e cinco, dá tranquilo pra manhã.
-OPERADOR A: Teve alguma caixa estourada?
-OPERADOR B: Teve um saco de ração rasgado na doca oito, já recolheram.
-OPERADOR A: Foi máquina ou motorista?
-OPERADOR B: Parece que pegou na lateral da carroceria.
-OPERADOR A: Deixaram anotado?
-OPERADOR B: Sim, o conferente assinou.
-OPERADOR A: E alguma máquina puxando pro lado?
-OPERADOR B: Nada que eu vi.
-OPERADOR A: Beleza, vou chamar a próxima carreta pra sete.
-OPERADOR B: Manda bala.
+OPERADOR A: Vamos registrar os itens críticos desta passagem de turno.
+OPERADOR B: Não. O status da carga refrigerada não foi conferido neste turno e não deve ser marcado como confirmado.
+OPERADOR A: Próximo item do checklist.
+OPERADOR B: Liberação da doca sete confirmada: ela está pronta, sem carreta e com o piso limpo.
+OPERADOR A: Próximo item do checklist.
+OPERADOR B: Nível de bateria confirmado: a bateria da Jungheinrich um está em noventa por cento e a bateria da empilhadeira quatro está em setenta e cinco por cento.
+OPERADOR A: Último item do checklist.
+OPERADOR B: Há uma avaria registrada: um saco de ração rasgou na doca oito, foi recolhido e o conferente assinou o registro.
+OPERADOR A: Encerrando a passagem.
+OPERADOR B: Confirmado: a carga refrigerada continua pendente de conferência.
