@@ -138,15 +138,24 @@ def _analisar_com_cliente(
     if not transcricao.strip():
         raise ValidationEngineError("A análise exige uma transcrição não vazia.")
 
-    completion = client.chat.completions.parse(
-        model=model,
-        temperature=0,
-        messages=[
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": [
             {"role": "system", "content": _SYSTEM_INSTRUCTIONS},
             {"role": "user", "content": _request_payload(transcricao, itens)},
         ],
-        response_format=AnalyzeResponse,
-    )
+        "response_format": AnalyzeResponse,
+        # Determinismo é desejável aqui, mas as famílias mais novas aceitam
+        # apenas a temperatura padrão e rejeitam o parâmetro com 400.
+        "temperature": 0,
+    }
+    try:
+        completion = client.chat.completions.parse(**kwargs)
+    except Exception as exc:
+        if "temperature" not in str(exc):
+            raise
+        kwargs.pop("temperature")
+        completion = client.chat.completions.parse(**kwargs)
     message = completion.choices[0].message
     refusal = getattr(message, "refusal", None)
     if refusal:
