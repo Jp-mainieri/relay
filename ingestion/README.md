@@ -21,7 +21,7 @@ escolhe uma e inicia, `r` reseta/para (para rodar de novo do zero), `q` sai.
 
 Modo não-interativo (ensaio automatizado / CI):
 ```bash
-python -m ingestion.cli --file mocks/transcricoes/placeholder_turno_exemplo.txt --auto
+python -m ingestion.cli --file mocks/transcricoes/completa_padrao.txt --auto
 ```
 
 Flags: `--backend-url`, `--station-id`, `--delay` (segundos entre falas,
