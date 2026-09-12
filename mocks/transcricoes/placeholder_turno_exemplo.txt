@@ -1,0 +1,5 @@
+OPERADOR A: E ai, tudo certo pra fechar o turno?
+OPERADOR B: Tranquilo. A carga da Swift ja ta no plug 3, refrigerada certinha.
+OPERADOR A: Show. E a doca, ja liberou?
+OPERADOR B: Ja, liberei a doca 4 faz uns 10 minutos.
+OPERADOR A: Beleza, fechado por aqui entao. Valeu, ate amanha.
