@@ -1,206 +1,98 @@
 # Relay
 
-**Agente de áudio ambiental para passagem de turno.** Relay escuta a troca de
-turno entre operadores em ambientes logísticos e industriais, confere se o
-checklist crítico da estação foi verbalmente coberto e, só ao final da
-conversa, avisa por voz — uma única vez — se algo ficou faltando. Depois
-publica um resumo estruturado no Slack do gestor.
+Agente de áudio ambiental para passagem de turno: confere se o checklist crítico da estação foi dito em voz alta e, só no fim da conversa, avisa por voz uma única vez se algo ficou faltando.
 
-> Relay = corrida de revezamento: a prova não se ganha correndo mais rápido,
-> ganha-se passando o bastão sem deixar cair.
-
----
+<!-- DEMO -->
 
 ## O problema
 
-Em operação logística, a passagem de turno é verbal, informal e não deixa
-registro. O que não é dito, some — e reaparece horas depois como parada de
-operação, carga perdida ou acidente. Ninguém erra por má-fé: o ambiente é
-barulhento, a conversa é apressada, e não existe nada checando o que ficou
-de fora.
+Em operação logística, a passagem de turno é verbal, informal e não deixa registro. O que não é dito some, e reaparece horas depois como parada de operação, carga perdida ou acidente. O ambiente é barulhento, a conversa é apressada e nada confere o que ficou de fora.
 
-## Por que isso não é um chatbot
+O Relay não é um chatbot: o operador nunca abre um app nem faz perguntas. O agente escuta a conversa que já acontece, valida contra um checklist e só interrompe uma vez, depois que a conversa termina, e só se faltou algo crítico.
 
-O usuário principal — o operador de turno — nunca abre um app, nunca digita
-uma pergunta, nunca inicia uma conversa com um agente. Ele apenas fala com o
-colega, como já fazia antes do Relay existir. O agente vive dentro do momento
-de trabalho real, não numa janela de chat que alguém precisa lembrar de abrir.
-Isso muda o desenho do sistema por completo:
+## Como funciona
 
-- **O agente escuta, não pergunta.** Não há prompt inicial, não há turno de
-  conversa com o usuário — só validação passiva contra um checklist.
-- **A única interação é uma interrupção condicional, no momento certo.** O
-  agente fala uma única vez, só se algo faltou, só depois que a conversa
-  humana terminou. Isso é uma decisão de produto, não uma limitação técnica —
-  um sistema que interrompe no meio da fala é desligado no primeiro dia.
-- **O valor não existiria fora desse ambiente.** Um chatbot de checklist exige
-  que alguém o alimente manualmente; aqui a fonte de verdade é a própria
-  conversa de trabalho, e o ambiente (chão de fábrica, doca, câmara fria) é
-  parte do desenho, não um wrapper.
-
-## Como funciona, ponta a ponta
-
-```
-Operador fala normalmente
-        │
-        ▼
-Ingestão (P1) — transcreve/injeta a fala, em sequência
-        │
-        ▼
-Orquestrador (P2) — FastAPI, estado do turno em memória,
-                     broadcast via WebSocket (snapshot completo)
-        │
-        ▼
-Motor de validação (P3) — compara transcrição x checklist crítico
-                           via LLM com Structured Outputs;
-                           cada item coberto precisa apontar o
-                           trecho literal da fala que prova
-        │
-        ├──► Ambiguous — consulta os últimos 7 dias da estação,
-        │                sinaliza reincidência de falha
-        │
-        ▼
-Fim do turno (POST /api/turn/end)
-        │
-        ├──► Se item crítico não coberto: intervenção por voz (uma vez)
-        └──► Card estruturado publicado no Slack do gestor
+```mermaid
+flowchart TD
+    OP([Operadores trocam de turno]) --> ING["Ingestão (P1)<br/>player de transcrição<br/>POST /api/transcript"]
+    ING --> ORQ["Orquestrador (P2)<br/>FastAPI · estado do turno<br/>WebSocket para o dashboard"]
+    ORQ --> VAL["🧠 Motor de validação (P3)<br/>LLM com Structured Outputs<br/>gpt-4o-mini · fallback OpenRouter<br/>cada item coberto aponta a fala literal"]
+    VAL -->|itens cobertos e faltantes| ORQ
+    ORQ -.->|consulta últimos 7 dias| AMB[("Ambiguous<br/>memória longitudinal")]
+    AMB -.->|reincidência de falha| ORQ
+    FIM(["POST /api/turn/end"]) --> ORQ
+    ORQ -->|item crítico faltou| VOZ["🔊 Voz (dashboard)<br/>speechSynthesis do navegador<br/>ou OpenAI TTS, desativado"]
+    ORQ -->|card estruturado| SL["Slack do gestor<br/>(webhook, via dashboard)"]
+    ORQ -->|snapshot ao vivo| DASH["Dashboard do gestor<br/>Next.js + CopilotKit"]
 ```
 
-Regra de ouro do motor: **falso positivo é o pior erro possível.** Marcar
-como coberto algo que não foi dito cria confiança falsa — pior do que não ter
-sistema nenhum. Por isso a arquitetura ancora cada item coberto num índice
-literal da fala, não numa paráfrase gerada pelo modelo.
+Pontos de IA no código:
 
----
+- **LLM (motor de validação):** `backend/validacao.py` e `backend/validation_client.py` comparam a transcrição com o checklist usando Structured Outputs (OpenAI, com contingência via OpenRouter). Cada item marcado como coberto precisa apontar o trecho literal da fala que o prova, porque falso positivo é o pior erro do sistema.
+- **Memória longitudinal (Ambiguous):** ao fim do turno, o backend consulta os registros da estação nos últimos 7 dias e sinaliza reincidência (por exemplo, a mesma empilhadeira com falha repetida). Só o registro estruturado é gravado; nenhuma transcrição bruta é enviada. Sem a chave, o fluxo segue com `ambiguous_alert=null`.
+- **Voz:** a intervenção é falada no dashboard com `speechSynthesis` do navegador. Existe uma rota para OpenAI TTS (`gpt-4o-mini-tts`), mas ela não está no caminho ativo.
+- **Tools/MCP:** o projeto não usa tool calling nem MCP.
 
-## Como testar você mesmo
+## O que é protótipo
 
-Você precisa de **3 terminais** rodando ao mesmo tempo — o dashboard sozinho
-mostra uma tela vazia, porque quem "fala" durante o teste é o player de
-ingestão, não um microfone real.
+Para ser claro sobre o estado do projeto:
 
-### 1. Backend (orquestrador + motor de validação)
+- **A fala vem de transcrições, não de microfone.** O "operador falando" é um player (`ingestion/`) que injeta as falas de `mocks/transcricoes/` uma a uma. Não há captura de áudio nem STT no código.
+- **CopilotKit** está em estágio de esqueleto; recursos avançados de generative UI não foram explorados.
+- **Slack:** o backend monta o card e simula o envio (`backend/slack_mock.py`). O dashboard envia ao webhook real pela rota `/api/slack` quando `SLACK_WEBHOOK_URL` está configurada. Esse envio real não foi verificado nesta revisão do README.
+- Estado do turno só em memória, sem autenticação e com CORS aberto.
+- Com `gpt-4o-mini`, a transcrição `incompleta_sem_refrigerada` pode não disparar o alerta (o modelo confunde "carga" de bateria com carga refrigerada). Modelos mais fortes ainda não foram testados nas mesmas transcrições.
+- Se a validação cair em modo mock (sem crédito ou timeout), o dashboard não mostra isso.
+- Não houve validação com usuários reais.
+
+## Stack
+
+- Backend: Python, FastAPI, WebSocket, Pydantic
+- LLM: OpenAI (`gpt-4o-mini` por padrão) com Structured Outputs; OpenRouter como contingência
+- Dashboard: Next.js 14, React 18, CopilotKit (esqueleto)
+- Memória longitudinal: Ambiguous
+- Notificação: Slack Incoming Webhook
+
+## Contexto
+
+Projeto feito em cerca de 4 horas no Hackathon Global da AI Tinkerers & OpenAI + partners. Sem colocação.
+
+## Como rodar localmente
+
+Você precisa de 3 terminais, porque o dashboard sozinho fica vazio: quem "fala" é o player de ingestão.
+
+**1. Backend**
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r backend/requirements.txt
+cp .env.example .env     # preencha OPENAI_API_KEY; os demais são opcionais
 uvicorn backend.main:app --reload --port 8000
 ```
 
-Endpoints ativos:
-- `POST /api/config` — cria o turno
-- `POST /api/transcript` — recebe fala, ordena por sequência, roda o motor
-- `POST /api/turn/end` — fecha o turno, dispara intervenção e card do Slack
-- `ws://localhost:8000/ws/{station_id}` — snapshot ao vivo do turno
-
-### 2. Variáveis de ambiente
-
-Copie `.env.example` para `.env` e preencha:
-
-```
-OPENAI_API_KEY=...
-AMBIGUOUS_API_KEY=...
-SLACK_WEBHOOK_URL=...
-```
-
-Sem `AMBIGUOUS_API_KEY`, o fluxo continua normalmente com
-`ambiguous_alert=null` — a ausência da chave não quebra a demo (ver seção
-Ambiguous abaixo).
-
-### 3. Dashboard
+**2. Dashboard**
 
 ```bash
 cd dashboard
 npm install
-cp .env.local.example .env.local   # deixe a chave de TTS vazia
+cp .env.local.example .env.local   # deixe a chave de TTS vazia para usar a voz do navegador
 npm run dev
 ```
 
-Deixando a chave de TTS vazia, a voz usa `speechSynthesis` nativo do
-navegador — funciona sem custo de API.
-
-### 4. Player de ingestão (simula a fala do turno)
+**3. Player de ingestão**
 
 ```bash
-python -m ingestion.cli --help
+pip install -r ingestion/requirements.txt
+python -m ingestion.cli --file mocks/transcricoes/completa_padrao.txt --auto
 ```
 
-Use uma das transcrições de teste em `mocks/transcricoes/`:
-- `completa_padrao.txt` — turno completo, todos os itens cobertos
-- `empilhadeira2_problema.txt` — turno completo, com reincidência de falha
-- `incompleta_sem_refrigerada.txt` — turno com item crítico faltando
-  (⚠️ conhecido: hoje o motor pode não disparar o alerta nesse caso com
-  modelos menores; ver seção de limitações)
+Transcrições de exemplo em `mocks/transcricoes/`: `completa_padrao.txt` (tudo coberto), `empilhadeira2_problema.txt` (com reincidência de falha) e `incompleta_sem_refrigerada.txt` (item crítico faltando).
 
-### 5. Testes automatizados
+**Testes**
 
 ```bash
-python -m unittest backend.test_validacao   # 6 testes
-python -m backend.harness_p3                # roda as 3 transcrições de exemplo
+pip install pytest
+python -m pytest backend -q
 ```
 
----
-
-## Ambiguous AI — memória longitudinal
-
-O que transforma o Relay de "checklist automatizado" em "inteligência
-operacional" é a camada da Ambiguous. Ao final de cada turno:
-
-- O motor consulta os documentos da própria estação dos **últimos 7 dias**.
-- Se o mesmo equipamento ou doca aparece com falha recorrente, o sistema
-  sinaliza isso explicitamente no card do gestor — ex: *"a empilhadeira 2 já
-  falhou recarga 3 vezes esta semana"*. Isso transforma um evento isolado em
-  um padrão acionável, algo que a passagem de turno verbal nunca conseguiria
-  capturar sozinha.
-- Um `AmbiguousTurnRecord` estruturado é gravado ao final do turno.
-- **Nenhum áudio ou transcrição bruta é enviado** — só o registro estruturado
-  do que foi validado.
-- Se a chave não estiver configurada, ou o serviço falhar, o fluxo continua
-  normalmente com `ambiguous_alert=null`. A ausência de recorrência não trava
-  a demo nem o produto.
-
-## CopilotKit
-
-O dashboard ao vivo do gestor é construído em **Next.js 14 com CopilotKit**.
-Sendo transparentes sobre o estado atual: no momento desta submissão, a
-integração está num estágio de esqueleto — a base do dashboard usa o
-framework, mas não estamos reivindicando o uso de recursos avançados de
-generative UI do CopilotKit que não tivemos tempo de validar dentro das 4h.
-Preferimos declarar isso com precisão a exagerar a integração.
-
----
-
-## Limitações conhecidas (declaradas com intenção)
-
-Não escondemos o que não deu tempo de resolver — achamos que isso é mais
-útil para quem avalia do que uma demo que finge não ter arestas:
-
-1. **Falha e sucesso do motor são visualmente idênticos hoje.** Se a
-   validação cai em modo mock (falta de crédito, timeout), não há indicador
-   na tela. É o maior risco sistêmico do projeto atualmente.
-2. **Discernimento semântico depende do modelo escolhido.** Com
-   `gpt-4o-mini`, a transcrição crítica desenhada para faltar apenas um item
-   pode não disparar o alerta — o modelo confunde sentidos próximos da
-   mesma palavra (ex: "carga" de bateria vs. carga refrigerada). A correção
-   identificada é testar modelos com mais discernimento semântico
-   (`gpt-4.1-mini`, `gpt-5-mini`) nas mesmas transcrições.
-3. **Persistência é 100% em memória.** Reiniciar o backend perde os turnos
-   em andamento — coerente com o escopo de demo, não para uso em produção.
-4. **Sem autenticação, CORS aberto.** Fora de escopo declarado para o MVP.
-5. **Validação de problem-solution fit não foi feita com usuários reais** —
-   foi assumida como dado pelo enunciado do desafio, dentro do tempo do
-   hackathon.
-
-## Time e fronteiras
-
-| Fronteira | Responsável | Escopo |
-|---|---|---|
-| P1 — Ingestão | João Pedro Panza Mainieri | Parser/player que injeta a transcrição do turno |
-| P2 — Orquestrador | Lucas Leal Ibrahim | FastAPI, estado do turno, WebSocket |
-| P3 — Motor de validação | Leonardo Miranda Nunciaroni (Lead) | LLM + Structured Outputs, invariantes anti-falso-positivo |
-| P4 — Dashboard / voz / Slack | Lucas Leonel | Next.js + CopilotKit, TTS via `speechSynthesis`, card do Slack |
-| Ambiguous | João Pedro Panza Mainieri | Memória longitudinal e detecção de reincidência |
-
-Contratos de dados entre as fronteiras estão **congelados** em `shared/`
-(`schemas.py` + `types.ts`) — ver `CONTRACTS.md` antes de qualquer mudança
-estrutural.
+Os testes do backend rodam sem chaves de API. A especificação completa do projeto está em `01-requisitos.md` a `05-arquitetura.md`.
