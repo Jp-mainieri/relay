@@ -42,8 +42,8 @@
   --status-bar: 6px;
 
   /* --- Tipografia --- */
-  --sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: var(--font-inter, ui-sans-serif), ui-sans-serif, system-ui, sans-serif;
+  --mono: var(--font-mono, ui-monospace), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --w-regular: 400;
   --w-medium: 510;
