@@ -42,10 +42,29 @@ MAX_READ_TIMEOUT_SECONDS = 1.5
 MAX_WRITE_TIMEOUT_SECONDS = 15.0
 RECORD_TITLE_PREFIX = "Relay | Turno |"
 
+# As transcrições chegam com números por extenso ("empilhadeira dois"), não só
+# em algarismos. Sem este mapa a extração devolvia [] e a reincidência nunca
+# disparava. Normalizar para algarismo mantém a entidade estável entre turnos
+# ("empilhadeira 2" e "empilhadeira dois" são o mesmo registro).
+_NUMBER_WORDS = {
+    "um": 1, "uma": 1, "dois": 2, "duas": 2, "três": 3, "tres": 3, "quatro": 4,
+    "cinco": 5, "seis": 6, "sete": 7, "oito": 8, "nove": 9, "dez": 10,
+    "onze": 11, "doze": 12, "treze": 13, "catorze": 14, "quatorze": 14,
+    "quinze": 15, "dezesseis": 16, "dezessete": 17, "dezoito": 18,
+    "dezenove": 19, "vinte": 20,
+}
+_NUMBER = r"(\d+|" + "|".join(sorted(_NUMBER_WORDS, key=len, reverse=True)) + r")"
+
 _ENTITY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("empilhadeira", re.compile(r"\bempilhadeira\s*(?:n[ºo.]?\s*)?(\d+)\b", re.IGNORECASE)),
-    ("doca", re.compile(r"\bdoca\s*(?:n[ºo.]?\s*)?(\d+)\b", re.IGNORECASE)),
+    ("empilhadeira", re.compile(r"\bempilhadeira\s*(?:n[ºo.]?\s*)?" + _NUMBER + r"\b", re.IGNORECASE)),
+    ("doca", re.compile(r"\bdoca\s*(?:n[ºo.]?\s*)?" + _NUMBER + r"\b", re.IGNORECASE)),
 )
+
+
+def _entity_number(raw: str) -> str:
+    return raw if raw.isdigit() else str(_NUMBER_WORDS[raw.casefold()])
+
+
 _INCIDENT_HINT = re.compile(
     r"\b(problema|falha|avaria|pend[eê]ncia|manuten[cç][aã]o|recarga|solt[oa]|quebrad[oa]|vazamento)\b",
     re.IGNORECASE,
@@ -61,7 +80,7 @@ def extract_critical_entities(transcript: str) -> list[str]:
     found: list[str] = []
     for kind, pattern in _ENTITY_PATTERNS:
         for match in pattern.finditer(transcript):
-            entity = f"{kind} {match.group(1)}"
+            entity = f"{kind} {_entity_number(match.group(1))}"
             if entity not in found:
                 found.append(entity)
     return found

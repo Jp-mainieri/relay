@@ -25,6 +25,15 @@ class AmbiguousClientTests(unittest.TestCase):
         entities = extract_critical_entities("A empilhadeira 2 falhou; a doca 5 está livre. Empilhadeira 2 de novo.")
         self.assertEqual(entities, ["empilhadeira 2", "doca 5"])
 
+    def test_extrai_entidades_com_numero_por_extenso(self) -> None:
+        entities = extract_critical_entities(
+            "A empilhadeira dois tem problema de recarga. Liberação da doca cinco. Empilhadeira 2 de novo."
+        )
+        self.assertEqual(entities, ["empilhadeira 2", "doca 5"])
+
+    def test_numero_por_extenso_nao_casa_prefixo_de_palavra(self) -> None:
+        self.assertEqual(extract_critical_entities("A empilhadeira umidade alta."), [])
+
     def test_so_cria_incidente_com_indicio_explicito(self) -> None:
         transcript = "A empilhadeira 2 está com problema de recarga. A doca 5 está livre."
         incidents = extract_new_incidents(transcript, ["empilhadeira 2", "doca 5"])
