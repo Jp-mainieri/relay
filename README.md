@@ -52,7 +52,7 @@ Para ser claro sobre o estado do projeto:
 ## Stack
 
 - Backend: Python, FastAPI, WebSocket, Pydantic
-- LLM: OpenAI (`gpt-4o-mini` por padrão) com Structured Outputs; OpenRouter como contingência
+- LLM: OpenAI (`gpt-4o-mini` por padrão) com Structured Outputs. Qualquer API compatível com a da OpenAI funciona pela rota de contingência (`OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL` e `LLM_MODEL`). O vídeo de demonstração foi gravado com a NeuraLake
 - Dashboard: Next.js 14, React 18, CopilotKit (esqueleto)
 - Memória longitudinal: Ambiguous
 - Notificação: Slack Incoming Webhook
