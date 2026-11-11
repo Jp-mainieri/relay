@@ -2,7 +2,9 @@
 
 Agente de áudio ambiental para passagem de turno: confere se o checklist crítico da estação foi dito em voz alta e, só no fim da conversa, avisa por voz uma única vez se algo ficou faltando.
 
-<!-- DEMO -->
+[![Demo do Relay](docs/demo.gif)](docs/demo.mp4)
+
+*Clique para ver o vídeo completo (90 s). As falas são injetadas a partir de transcrições, **sem microfone**. A voz do vídeo é ilustrativa (no app, a fala é do navegador), e a Ambiguous e o Slack são simulados localmente.*
 
 ## O problema
 
