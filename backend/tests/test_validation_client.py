@@ -79,10 +79,22 @@ def test_rnf04_falha_na_consulta_ambiguous_vira_none_e_nao_propaga(monkeypatch):
     AnalyzeResponse(**raw)  # resto continua válido
 
 
-def test_motor_real_que_falha_cai_para_o_fallback(monkeypatch):
+def test_motor_real_que_falha_cai_para_o_fallback_sem_chave(monkeypatch):
     def motor_quebrado(transcricao, itens):
         raise RuntimeError("openai fora do ar")
 
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.setattr(validation_client, "_analisar_real", motor_quebrado)
     raw = validation_client.analisar("OPERADOR A: x", ITENS_DOCA_04)
     AnalyzeResponse(**raw)
+
+
+def test_motor_real_que_falha_com_chave_nao_mostra_mock(monkeypatch):
+    def motor_quebrado(transcricao, itens):
+        raise RuntimeError("resposta recusada pela validacao")
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "nao-e-uma-chave")
+    monkeypatch.setattr(validation_client, "_analisar_real", motor_quebrado)
+    with pytest.raises(RuntimeError):
+        validation_client.analisar("OPERADOR A: x", ITENS_DOCA_04)

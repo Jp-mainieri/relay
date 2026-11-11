@@ -18,6 +18,7 @@ RNF04 se aplica em dois níveis aqui:
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Optional
 
 from backend.mock_data import load
@@ -103,8 +104,19 @@ def analisar(transcricao: str, itens: list[str]) -> dict[str, Any]:
         try:
             return _analisar_real(transcricao, itens)
         except Exception:
+            if _llm_configurado():
+                # Com chave configurada, o mock não pode entrar no lugar do motor:
+                # ele traz evidências de outra transcrição e o dashboard as mostraria
+                # como reais. A exceção sobe para backend/main.py, que mantém o
+                # último estado conhecido e emite `error` (mesmo caminho do timeout).
+                logger.exception("Motor real de validacao (P3) falhou — mantendo ultimo estado conhecido.")
+                raise
             logger.exception("Motor real de validacao (P3) falhou — usando fallback de mock.")
     return _fallback_response(transcricao, itens)
+
+
+def _llm_configurado() -> bool:
+    return bool(os.getenv("OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY"))
 
 
 def persistir_turno(
