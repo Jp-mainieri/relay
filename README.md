@@ -4,6 +4,8 @@ Agente de áudio ambiental para passagem de turno: confere se o checklist críti
 
 [![Demo do Relay](docs/demo.gif)](docs/demo.mp4)
 
+▶ **[Assistir ao vídeo completo](docs/demo.mp4)**
+
 *Clique para ver o vídeo completo (90 s). As falas são injetadas a partir de transcrições, **sem microfone**. A voz do vídeo é ilustrativa (no app, a fala é do navegador), e a Ambiguous e o Slack são simulados localmente.*
 
 ## O problema
